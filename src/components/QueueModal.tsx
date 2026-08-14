@@ -12,7 +12,7 @@ export default function QueueModal() {
   const index = useStore((s) => s.playbackIndex);
   const currentTrack = useStore((s) => s.currentTrack);
   const [tab, setTab] = useState<QueueTab>('upnext');
-  const [, bump] = useState(0);
+  const [dragFrom, setDragFrom] = useState<number | null>(null);
 
   const previous = useMemo(
     () =>
@@ -34,11 +34,13 @@ export default function QueueModal() {
 
   if (!open) return null;
 
-  const refresh = () => bump((n) => n + 1);
+  const move = async (from: number, to: number) => {
+    await audioPlayer.moveTrack(from, to);
+  };
 
   return (
     <div className="modal-backdrop" onClick={() => setQueueOpen(false)}>
-      <div className="modal-sheet" onClick={(e) => e.stopPropagation()}>
+      <div className="modal-sheet queue-sheet" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <button type="button" className="icon-btn" onClick={() => setQueueOpen(false)}>
             <Icons.chevronDown size={26} />
@@ -68,18 +70,7 @@ export default function QueueModal() {
           {tab === 'upnext' ? (
             <>
               <div style={{ padding: '16px 16px 8px' }}>
-                <div
-                  style={{
-                    fontSize: 12,
-                    fontWeight: 700,
-                    letterSpacing: 0.6,
-                    textTransform: 'uppercase',
-                    color: 'var(--text-secondary)',
-                    marginBottom: 8,
-                  }}
-                >
-                  Now playing
-                </div>
+                <div className="queue-section-label">Now playing</div>
                 {currentTrack ? (
                   <div
                     className="song-row active"
@@ -98,51 +89,90 @@ export default function QueueModal() {
                 )}
               </div>
 
-              <div
-                style={{
-                  padding: '16px 16px 8px',
-                  fontSize: 12,
-                  fontWeight: 700,
-                  letterSpacing: 0.6,
-                  textTransform: 'uppercase',
-                  color: 'var(--text-secondary)',
-                }}
-              >
+              <div className="queue-section-label" style={{ padding: '16px 16px 8px' }}>
                 Next in queue
+                {upcoming.length > 0 ? (
+                  <span className="queue-hint"> Drag or use arrows to reorder</span>
+                ) : null}
               </div>
 
               {upcoming.length === 0 ? (
                 <div className="empty">No upcoming tracks</div>
               ) : (
-                upcoming.map((item) => (
-                  <div className="song-row" key={`${item.queueIndex}-${item.track.id}`}>
-                    <button
-                      type="button"
-                      className="song-text"
-                      style={{ display: 'flex', gap: 12, alignItems: 'center' }}
-                      onClick={() => {
-                        void audioPlayer.skipToIndex(item.queueIndex).then(refresh);
+                upcoming.map((item, visualIndex) => {
+                  const canMoveUp = visualIndex > 0;
+                  const canMoveDown = visualIndex < upcoming.length - 1;
+                  return (
+                    <div
+                      className={`song-row queue-row ${dragFrom === item.queueIndex ? 'dragging' : ''}`}
+                      key={`${item.queueIndex}-${item.track.id}`}
+                      draggable
+                      onDragStart={() => setDragFrom(item.queueIndex)}
+                      onDragEnd={() => setDragFrom(null)}
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={() => {
+                        if (dragFrom == null || dragFrom === item.queueIndex) return;
+                        void move(dragFrom, item.queueIndex).then(() => setDragFrom(null));
                       }}
                     >
-                      <div className="song-art">
-                        <Icons.music size={18} />
+                      <span className="queue-grip" aria-hidden title="Drag to reorder">
+                        <Icons.grip size={16} />
+                      </span>
+                      <button
+                        type="button"
+                        className="song-text"
+                        style={{ display: 'flex', gap: 12, alignItems: 'center' }}
+                        onClick={() => {
+                          void audioPlayer.skipToIndex(item.queueIndex);
+                        }}
+                      >
+                        <div className="song-art">
+                          <Icons.music size={18} />
+                        </div>
+                        <div style={{ minWidth: 0, flex: 1 }}>
+                          <div className="song-title">{item.track.title}</div>
+                          <div className="song-sub">{item.track.artist}</div>
+                        </div>
+                      </button>
+                      <div className="queue-reorder">
+                        <button
+                          type="button"
+                          className="icon-btn queue-move"
+                          aria-label="Move up"
+                          disabled={!canMoveUp}
+                          onClick={() => {
+                            if (!canMoveUp) return;
+                            void move(item.queueIndex, item.queueIndex - 1);
+                          }}
+                        >
+                          <Icons.chevronUp size={18} />
+                        </button>
+                        <button
+                          type="button"
+                          className="icon-btn queue-move"
+                          aria-label="Move down"
+                          disabled={!canMoveDown}
+                          onClick={() => {
+                            if (!canMoveDown) return;
+                            void move(item.queueIndex, item.queueIndex + 1);
+                          }}
+                        >
+                          <Icons.chevronDown size={18} />
+                        </button>
                       </div>
-                      <div style={{ minWidth: 0, flex: 1 }}>
-                        <div className="song-title">{item.track.title}</div>
-                        <div className="song-sub">{item.track.artist}</div>
-                      </div>
-                    </button>
-                    <button
-                      type="button"
-                      className="icon-btn"
-                      onClick={() => {
-                        void audioPlayer.removeAt(item.queueIndex).then(refresh);
-                      }}
-                    >
-                      <Icons.close size={18} />
-                    </button>
-                  </div>
-                ))
+                      <button
+                        type="button"
+                        className="icon-btn"
+                        aria-label="Remove from queue"
+                        onClick={() => {
+                          void audioPlayer.removeAt(item.queueIndex);
+                        }}
+                      >
+                        <Icons.close size={18} />
+                      </button>
+                    </div>
+                  );
+                })
               )}
             </>
           ) : previous.length === 0 ? (
@@ -160,7 +190,6 @@ export default function QueueModal() {
                   onClick={() => {
                     void audioPlayer.skipToIndex(item.queueIndex).then(() => {
                       setTab('upnext');
-                      refresh();
                     });
                   }}
                 >
@@ -178,7 +207,6 @@ export default function QueueModal() {
                   onClick={() => {
                     void audioPlayer.skipToIndex(item.queueIndex).then(() => {
                       setTab('upnext');
-                      refresh();
                     });
                   }}
                 >

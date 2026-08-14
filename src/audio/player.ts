@@ -4,13 +4,19 @@ import type { PlayerTrack, RepeatModeSetting } from '../types';
 
 type Listener = () => void;
 
+const PREFETCH_AHEAD = 2;
+const CACHE_LIMIT = 12;
+
 class WebAudioPlayer {
   private audio = new Audio();
   private blobCache = new Map<string, string>();
+  private prefetching = new Set<string>();
   private queue: PlayerTrack[] = [];
   private index = 0;
   private listeners = new Set<Listener>();
   private progressTimer: number | null = null;
+  /** Monotonic id so only the latest loadAndPlay applies audio. */
+  private loadGeneration = 0;
 
   constructor() {
     this.audio.preload = 'auto';
@@ -80,6 +86,25 @@ class WebAudioPlayer {
     }
   }
 
+  /**
+   * After a page reload the store may still have a queue while this
+   * in-memory player is empty — hydrate so skip/play keep working.
+   */
+  ensureQueueHydrated(): boolean {
+    if (this.queue.length > 0) return true;
+    const { playbackQueue, playbackIndex, currentTrack } = useStore.getState();
+    if (playbackQueue.length === 0) return false;
+    this.queue = playbackQueue;
+    const byId = currentTrack
+      ? playbackQueue.findIndex((t) => t.id === currentTrack.id)
+      : -1;
+    this.index =
+      byId >= 0
+        ? byId
+        : Math.min(Math.max(0, playbackIndex), playbackQueue.length - 1);
+    return true;
+  }
+
   getQueue() {
     return this.queue;
   }
@@ -114,10 +139,13 @@ class WebAudioPlayer {
     useStore
       .getState()
       .setPlaybackSession(tracks, this.index, tracks[this.index]);
+    // Warm the first upcoming tracks while current starts
+    this.prefetchAround(this.index);
     await this.loadAndPlay(this.index);
   }
 
   async play(): Promise<void> {
+    this.ensureQueueHydrated();
     if (!this.audio.src) {
       const track = this.getActiveTrack();
       if (track) {
@@ -138,6 +166,7 @@ class WebAudioPlayer {
   }
 
   async togglePlayPause(): Promise<void> {
+    this.ensureQueueHydrated();
     if (this.audio.paused) {
       await this.play();
     } else {
@@ -153,7 +182,7 @@ class WebAudioPlayer {
   }
 
   async skipToNext(): Promise<void> {
-    if (this.queue.length === 0) return;
+    if (!this.ensureQueueHydrated()) return;
     const next = this.index + 1;
     if (next >= this.queue.length) {
       const repeat = useStore.getState().repeatMode;
@@ -166,7 +195,7 @@ class WebAudioPlayer {
   }
 
   async skipToPrevious(): Promise<void> {
-    if (this.queue.length === 0) return;
+    if (!this.ensureQueueHydrated()) return;
     if (this.audio.currentTime > 3) {
       await this.seekTo(0);
       return;
@@ -179,11 +208,13 @@ class WebAudioPlayer {
   }
 
   async skipToIndex(index: number): Promise<void> {
+    if (!this.ensureQueueHydrated()) return;
     if (index < 0 || index >= this.queue.length) return;
     await this.loadAndPlay(index);
   }
 
   async removeAt(index: number): Promise<void> {
+    this.ensureQueueHydrated();
     if (index < 0 || index >= this.queue.length) return;
     const wasActive = index === this.index;
     this.queue = this.queue.filter((_, i) => i !== index);
@@ -201,14 +232,16 @@ class WebAudioPlayer {
     if (wasActive && this.queue.length > 0) {
       await this.loadAndPlay(this.index);
     } else if (this.queue.length === 0) {
-      this.audio.pause();
-      this.audio.removeAttribute('src');
+      this.stopAudioHard();
       useStore.getState().setCurrentTrack(null);
       useStore.getState().setPlaying(false);
+    } else {
+      this.prefetchAround(this.index);
     }
   }
 
   async moveTrack(from: number, to: number): Promise<void> {
+    this.ensureQueueHydrated();
     if (
       from === to ||
       from < 0 ||
@@ -230,6 +263,15 @@ class WebAudioPlayer {
     useStore
       .getState()
       .setPlaybackSession(this.queue, this.index, this.queue[this.index]);
+    this.prefetchAround(this.index);
+  }
+
+  private stopAudioHard(): void {
+    this.loadGeneration += 1;
+    this.audio.pause();
+    this.audio.removeAttribute('src');
+    this.audio.load();
+    this.stopProgressLoop();
   }
 
   private async handleEnded(): Promise<void> {
@@ -251,7 +293,42 @@ class WebAudioPlayer {
     await this.seekTo(0);
   }
 
-  private async resolvePlayableUrl(track: PlayerTrack): Promise<string> {
+  private keepIds(): Set<string> {
+    const keep = new Set<string>();
+    for (
+      let i = Math.max(0, this.index - 1);
+      i <= Math.min(this.queue.length - 1, this.index + PREFETCH_AHEAD);
+      i++
+    ) {
+      const id = this.queue[i]?.id;
+      if (id) keep.add(id);
+    }
+    return keep;
+  }
+
+  private trimCache() {
+    const keep = this.keepIds();
+    while (this.blobCache.size > CACHE_LIMIT) {
+      let victim: string | undefined;
+      for (const id of this.blobCache.keys()) {
+        if (!keep.has(id)) {
+          victim = id;
+          break;
+        }
+      }
+      if (!victim) {
+        // All cached ids are nearby — drop oldest insertion order outside keep if possible
+        victim = this.blobCache.keys().next().value;
+        if (victim && keep.has(victim) && this.blobCache.size <= keep.size) break;
+      }
+      if (!victim) break;
+      const url = this.blobCache.get(victim);
+      if (url) URL.revokeObjectURL(url);
+      this.blobCache.delete(victim);
+    }
+  }
+
+  private async fetchBlobUrl(track: PlayerTrack): Promise<string> {
     const cached = this.blobCache.get(track.id);
     if (cached) return cached;
 
@@ -270,37 +347,90 @@ class WebAudioPlayer {
       throw new Error(`Stream failed (${res.status})`);
     }
     const blob = await res.blob();
+    const existing = this.blobCache.get(track.id);
+    if (existing) return existing;
+
     const objectUrl = URL.createObjectURL(blob);
     this.blobCache.set(track.id, objectUrl);
-
-    // Cap cache size
-    if (this.blobCache.size > 8) {
-      const first = this.blobCache.keys().next().value;
-      if (first && first !== track.id) {
-        const old = this.blobCache.get(first);
-        if (old) URL.revokeObjectURL(old);
-        this.blobCache.delete(first);
-      }
-    }
-
+    this.trimCache();
     return objectUrl;
+  }
+
+  /** Background-warm upcoming (and previous) tracks like Spotify. */
+  private prefetchAround(centerIndex: number) {
+    const targets: PlayerTrack[] = [];
+    for (let offset = 1; offset <= PREFETCH_AHEAD; offset++) {
+      const next = this.queue[centerIndex + offset];
+      if (next) targets.push(next);
+    }
+    const prev = this.queue[centerIndex - 1];
+    if (prev) targets.push(prev);
+
+    for (const track of targets) {
+      if (this.blobCache.has(track.id) || this.prefetching.has(track.id)) continue;
+      this.prefetching.add(track.id);
+      void this.fetchBlobUrl(track)
+        .catch(() => {
+          /* prefetch failures are non-fatal */
+        })
+        .finally(() => {
+          this.prefetching.delete(track.id);
+        });
+    }
+  }
+
+  private async resolvePlayableUrl(
+    track: PlayerTrack,
+    generation: number
+  ): Promise<string | null> {
+    const cached = this.blobCache.get(track.id);
+    if (cached) return cached;
+
+    const url = await this.fetchBlobUrl(track);
+    if (generation !== this.loadGeneration) return null;
+    return url;
   }
 
   private async loadAndPlay(index: number): Promise<void> {
     const track = this.queue[index];
     if (!track) return;
 
+    const generation = ++this.loadGeneration;
     this.index = index;
-    useStore.getState().setBuffering(true);
+
+    const cached = this.blobCache.get(track.id);
+    const wasCached = Boolean(cached);
+
+    this.audio.pause();
+    this.stopProgressLoop();
+    useStore.getState().setProgress(0, 0);
+    useStore.getState().setPlaying(false);
+    // Only show buffering UI when we still need to download
+    useStore.getState().setBuffering(!wasCached);
     useStore.getState().setPlaybackSession(this.queue, index, track);
     useStore.getState().setCurrentTrack(track);
     this.emit();
 
+    // Start warming neighbors as soon as we commit to this track
+    this.prefetchAround(index);
+
     try {
-      const url = await this.resolvePlayableUrl(track);
+      const url = wasCached
+        ? cached!
+        : await this.resolvePlayableUrl(track, generation);
+      if (generation !== this.loadGeneration || !url) return;
+
       this.audio.src = url;
       await this.audio.play();
+      if (generation !== this.loadGeneration) {
+        this.audio.pause();
+        return;
+      }
+      useStore.getState().setBuffering(false);
+      // Keep prefetching while this track plays
+      this.prefetchAround(index);
     } catch (err) {
+      if (generation !== this.loadGeneration) return;
       useStore.getState().setBuffering(false);
       useStore.getState().setPlaying(false);
       this.emit();

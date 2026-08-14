@@ -91,7 +91,41 @@ export default function AppLayout() {
 
   return (
     <div className="app-shell">
-      <nav className="tab-bar" aria-label="Main">
+      <header className="top-nav" aria-label="Main">
+        <NavLink to="/" end className="top-nav-brand">
+          <span className="top-nav-logo">
+            <Icons.music size={20} />
+          </span>
+          <span className="top-nav-name">MyCloudPlayer</span>
+        </NavLink>
+
+        <nav className="top-nav-links">
+          <NavLink
+            to="/"
+            end
+            className={({ isActive }) => `top-nav-link ${isActive ? 'active' : ''}`}
+          >
+            <Icons.library size={18} />
+            Library
+          </NavLink>
+          <NavLink
+            to="/search"
+            className={({ isActive }) => `top-nav-link ${isActive ? 'active' : ''}`}
+          >
+            <Icons.search size={18} />
+            Search
+          </NavLink>
+          <NavLink
+            to="/settings"
+            className={({ isActive }) => `top-nav-link ${isActive ? 'active' : ''}`}
+          >
+            <Icons.settings size={18} />
+            Settings
+          </NavLink>
+        </nav>
+      </header>
+
+      <nav className="tab-bar mobile-nav" aria-label="Mobile">
         <NavLink to="/" end className={({ isActive }) => `tab-item ${isActive ? 'active' : ''}`}>
           <Icons.library />
           Library
@@ -112,11 +146,13 @@ export default function AppLayout() {
         </NavLink>
       </nav>
 
-      <main className={`app-main ${currentTrack ? 'has-mini' : ''}`}>
-        <Outlet />
-      </main>
+      <div className="app-content">
+        <main className={`app-main ${currentTrack ? 'has-mini' : ''}`}>
+          <Outlet />
+        </main>
+        <MiniPlayer />
+      </div>
 
-      <MiniPlayer />
       <PlayerModal />
       <QueueModal />
     </div>

@@ -67,22 +67,34 @@ export default function PlayerModal() {
           <div className="secondary-controls">
             <button
               type="button"
-              className="icon-btn"
-              style={{ color: shuffleEnabled ? 'var(--primary)' : undefined }}
+              className={`icon-btn control-toggle ${shuffleEnabled ? 'on' : ''}`}
+              aria-label={shuffleEnabled ? 'Shuffle on' : 'Shuffle off'}
+              title={shuffleEnabled ? 'Shuffle on' : 'Shuffle off'}
               onClick={() => setShuffleEnabled(!shuffleEnabled)}
             >
               <Icons.shuffle />
             </button>
             <button
               type="button"
-              className="icon-btn"
-              style={{
-                color: repeatMode !== 'off' ? 'var(--primary)' : undefined,
-              }}
+              className={`icon-btn control-toggle ${repeatMode !== 'off' ? 'on' : ''}`}
+              aria-label={
+                repeatMode === 'off'
+                  ? 'Repeat off'
+                  : repeatMode === 'all'
+                    ? 'Repeat all'
+                    : 'Repeat one'
+              }
+              title={
+                repeatMode === 'off'
+                  ? 'Repeat off — click for Repeat all'
+                  : repeatMode === 'all'
+                    ? 'Repeat all — click for Repeat one'
+                    : 'Repeat one — click to turn off'
+              }
               onClick={() => setRepeatMode(cycleRepeatMode(repeatMode))}
             >
               <Icons.repeat />
-              {repeatMode === 'one' ? <span style={{ fontSize: 10 }}>1</span> : null}
+              {repeatMode === 'one' ? <span className="repeat-badge">1</span> : null}
             </button>
           </div>
 

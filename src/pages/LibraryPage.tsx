@@ -17,6 +17,7 @@ import {
 import { buildPlayQueue } from '../utils/playerQueue';
 import { playQueue, reshuffleActiveQueue } from '../utils/playback';
 import { searchLocalLibrary } from '../utils/localSearch';
+import { cycleRepeatMode } from '../utils/repeatMode';
 import type { LibraryItem } from '../types';
 
 type LibTab = 'songs' | 'playlists';
@@ -41,7 +42,9 @@ export default function LibraryPage() {
     shuffleEnabled,
     repeatMode,
     setShuffleEnabled,
+    setRepeatMode,
     isPlaying,
+    setQueueOpen,
   } = useStore();
 
   const [tab, setTab] = useState<LibTab>('songs');
@@ -224,10 +227,18 @@ export default function LibraryPage() {
           <button
             type="button"
             className="icon-btn"
-            aria-label="Refresh"
-            onClick={() => void loadLibrary(true)}
+            aria-label="Queue"
+            onClick={() => setQueueOpen(true)}
           >
             <Icons.list size={20} />
+          </button>
+          <button
+            type="button"
+            className="icon-btn"
+            aria-label="Refresh library"
+            onClick={() => void loadLibrary(true)}
+          >
+            <Icons.refresh size={20} />
           </button>
         </div>
       </header>
@@ -269,16 +280,34 @@ export default function LibraryPage() {
                 </button>
                 <button
                   type="button"
-                  className="icon-btn"
-                  style={{
-                    background: shuffleEnabled
-                      ? 'var(--primary-container)'
-                      : undefined,
-                    color: shuffleEnabled ? 'var(--primary)' : undefined,
-                  }}
+                  className={`icon-btn control-toggle ${shuffleEnabled ? 'on' : ''}`}
+                  aria-label={shuffleEnabled ? 'Shuffle on' : 'Shuffle off'}
+                  title={shuffleEnabled ? 'Shuffle on' : 'Shuffle off'}
                   onClick={() => void handleShuffleToggle()}
                 >
                   <Icons.shuffle />
+                </button>
+                <button
+                  type="button"
+                  className={`icon-btn control-toggle ${repeatMode !== 'off' ? 'on' : ''}`}
+                  aria-label={
+                    repeatMode === 'off'
+                      ? 'Repeat off'
+                      : repeatMode === 'all'
+                        ? 'Repeat all'
+                        : 'Repeat one'
+                  }
+                  title={
+                    repeatMode === 'off'
+                      ? 'Repeat off — click for Repeat all'
+                      : repeatMode === 'all'
+                        ? 'Repeat all — click for Repeat one'
+                        : 'Repeat one — click to turn off'
+                  }
+                  onClick={() => setRepeatMode(cycleRepeatMode(repeatMode))}
+                >
+                  <Icons.repeat />
+                  {repeatMode === 'one' ? <span className="repeat-badge">1</span> : null}
                 </button>
               </div>
             </>
