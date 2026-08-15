@@ -11,6 +11,7 @@ interface SongCardProps {
   onDelete?: () => void;
   deleteLabel?: string;
   showPlayButton?: boolean;
+  onPrefetch?: () => void;
 }
 
 export default function SongCard({
@@ -20,13 +21,17 @@ export default function SongCard({
   onDelete,
   deleteLabel = 'Delete',
   showPlayButton = false,
+  onPrefetch,
 }: SongCardProps) {
   const currentTrack = useStore((s) => s.currentTrack);
   const isPlaying = useStore((s) => s.isPlaying);
   const isActive = currentTrack?.id === song.id;
 
   return (
-    <div className={`song-row ${isActive ? 'active' : ''}`}>
+    <div
+      className={`song-row ${isActive ? 'active' : ''}`}
+      onPointerEnter={() => onPrefetch?.()}
+    >
       {index != null ? <span className="song-index">{index}</span> : null}
       <button type="button" className="song-art" onClick={onPlay} aria-label="Play">
         {isActive && isPlaying ? <Icons.music size={18} /> : <Icons.music size={18} />}

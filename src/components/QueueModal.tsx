@@ -49,17 +49,21 @@ export default function QueueModal() {
           <div style={{ width: 40 }} />
         </div>
 
-        <div className="chips">
+        <div className="queue-tabs" role="tablist" aria-label="Queue views">
           <button
             type="button"
-            className={`chip ${tab === 'upnext' ? 'active' : ''}`}
+            role="tab"
+            aria-selected={tab === 'upnext'}
+            className={`queue-tab ${tab === 'upnext' ? 'active' : ''}`}
             onClick={() => setTab('upnext')}
           >
             Up next ({upcoming.length + (currentTrack ? 1 : 0)})
           </button>
           <button
             type="button"
-            className={`chip ${tab === 'history' ? 'active' : ''}`}
+            role="tab"
+            aria-selected={tab === 'history'}
+            className={`queue-tab ${tab === 'history' ? 'active' : ''}`}
             onClick={() => setTab('history')}
           >
             History ({previous.length})

@@ -13,12 +13,14 @@ import { useStore } from '../store/useStore';
 import {
   driveFileToLibraryItem,
   libraryItemsToTracks,
+  toPlayerTrack,
 } from '../utils/libraryItems';
 import { buildPlayQueue } from '../utils/playerQueue';
 import { playQueue, reshuffleActiveQueue } from '../utils/playback';
 import { searchLocalLibrary } from '../utils/localSearch';
 import { cycleRepeatMode } from '../utils/repeatMode';
 import LoadingState from '../components/LoadingState';
+import { audioPlayer } from '../audio/player';
 import type { LibraryItem } from '../types';
 
 type LibTab = 'songs' | 'playlists';
@@ -90,6 +92,16 @@ export default function LibraryPage() {
         setSongs(fetchedSongs);
         setPlaylists(fetchedPlaylists);
         setLibraryError(null);
+
+        // Warm first few tracks so the first play starts faster
+        if (fetchedSongs.length > 0) {
+          const warmItems = fetchedSongs.slice(0, 3).map(driveFileToLibraryItem);
+          try {
+            audioPlayer.warmTracks(libraryItemsToTracks(warmItems, token));
+          } catch {
+            /* ignore warm errors */
+          }
+        }
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'Library error';
         setLibraryError(message);
@@ -334,6 +346,15 @@ export default function LibraryPage() {
                 index={i + 1}
                 onPlay={() => void playSong(song, displaySongs)}
                 onDelete={() => void handleDeleteSong(song)}
+                onPrefetch={() => {
+                  const token = useStore.getState().accessToken;
+                  if (!token) return;
+                  try {
+                    audioPlayer.warmTrack(toPlayerTrack(song, token));
+                  } catch {
+                    /* ignore */
+                  }
+                }}
               />
             ))
           )}
