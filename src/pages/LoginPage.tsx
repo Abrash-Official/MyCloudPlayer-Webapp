@@ -1,14 +1,19 @@
 import { useState } from 'react';
 import { Icons } from '../components/Icons';
-import { signIn } from '../api/auth';
+import { signIn, useNetlifyAuth } from '../api/auth';
 import { useStore } from '../store/useStore';
 import { useAppTheme } from '../hooks/useAppTheme';
 
-export default function LoginPage() {
+type LoginPageProps = {
+  initialError?: string | null;
+};
+
+export default function LoginPage({ initialError = null }: LoginPageProps) {
   const setAuth = useStore((s) => s.setAuth);
   const { colors } = useAppTheme();
   const [connecting, setConnecting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(initialError);
+  const netlify = useNetlifyAuth();
 
   const handleConnect = async () => {
     if (connecting) return;
@@ -16,13 +21,15 @@ export default function LoginPage() {
     setError(null);
     try {
       const result = await signIn();
-      setAuth(result.userInfo, result.accessToken, result.folderId);
+      // Netlify path redirects away; GIS path returns a result
+      if (result?.userInfo) {
+        setAuth(result.userInfo, result.accessToken, result.folderId);
+      }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Sign-in failed';
       if (!/cancel/i.test(message)) {
         setError(message);
       }
-    } finally {
       setConnecting(false);
     }
   };
@@ -64,19 +71,21 @@ export default function LoginPage() {
             <strong>Sign-in blocked</strong>
             <p>{error}</p>
             <p className="login-hint">
-              In Google Cloud Console → Credentials → your <em>Web</em> OAuth client,
-              add Authorized JavaScript origin:
+              Check Google Cloud → your Web OAuth client:
               <br />
-              <code>http://localhost:5173</code>
+              Origins: <code>https://mycloudplayer.netlify.app</code>
               <br />
-              Also ensure the OAuth consent screen includes your Google account as a
-              test user (if the app is in Testing mode).
+              Redirect URI:{' '}
+              <code>
+                https://mycloudplayer.netlify.app/.netlify/functions/auth-callback
+              </code>
             </p>
           </div>
         ) : (
           <p className="login-hint">
-            Works on localhost once <code>http://localhost:5173</code> is listed as an
-            authorized JavaScript origin. You do not need to deploy first.
+            {netlify
+              ? 'Long-session sign-in via Netlify. You should stay signed in for weeks without logging in again.'
+              : 'Local mode uses Google popup tokens (~1 hour). Deploy to Netlify for long sessions.'}
           </p>
         )}
       </div>

@@ -7,7 +7,14 @@ import LoginPage from '../pages/LoginPage';
 import { useAppTheme } from '../hooks/useAppTheme';
 import { useStore } from '../store/useStore';
 import { useEffect, useState } from 'react';
-import { restoreAuthSession, startTokenKeepAlive, signIn } from '../api/auth';
+import {
+  completeNetlifySignIn,
+  restoreAuthSession,
+  startNetlifySignIn,
+  startTokenKeepAlive,
+  signIn,
+  useNetlifyAuth,
+} from '../api/auth';
 import { usePlaybackControls } from '../hooks/usePlaybackControls';
 import LoadingState from './LoadingState';
 
@@ -21,6 +28,7 @@ export default function AppLayout() {
   const [hydrated, setHydrated] = useState(() => useStore.persist.hasHydrated());
   const [restoring, setRestoring] = useState(true);
   const [reconnecting, setReconnecting] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   usePlaybackControls(isAuthenticated && hydrated && !restoring);
 
@@ -55,6 +63,39 @@ export default function AppLayout() {
   useEffect(() => {
     if (!hydrated) return;
 
+    const params = new URLSearchParams(window.location.search);
+    const authFlag = params.get('auth');
+
+    const clearAuthQuery = () => {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('auth');
+      url.searchParams.delete('message');
+      window.history.replaceState({}, '', url.pathname + url.search + url.hash);
+    };
+
+    if (authFlag === 'error') {
+      setAuthError(params.get('message') || 'Google sign-in failed');
+      clearAuthQuery();
+      setRestoring(false);
+      return;
+    }
+
+    if (authFlag === 'success') {
+      setRestoring(true);
+      clearAuthQuery();
+      void completeNetlifySignIn()
+        .then((result) => {
+          setAuth(result.userInfo, result.accessToken, result.folderId);
+          setSessionExpired(false);
+          setAuthError(null);
+        })
+        .catch((err: unknown) => {
+          setAuthError(err instanceof Error ? err.message : 'Sign-in failed');
+        })
+        .finally(() => setRestoring(false));
+      return;
+    }
+
     const {
       userEmail,
       myCloudPlayerFolderId,
@@ -63,21 +104,14 @@ export default function AppLayout() {
       isAuthenticated: authed,
     } = useStore.getState();
 
-    if (!authed || !userEmail || !myCloudPlayerFolderId) {
-      setRestoring(false);
-      return;
-    }
-
     const tokenFresh =
       Boolean(accessToken) &&
       Boolean(tokenExpiresAt) &&
       (tokenExpiresAt as number) > Date.now() + 15_000;
 
-    // Stay in the app immediately when we still have a valid stored token
-    if (tokenFresh) {
+    if (tokenFresh && authed) {
       setRestoring(false);
       setSessionExpired(false);
-      // Quietly extend the session in the background
       void restoreAuthSession(userEmail, myCloudPlayerFolderId).then((restored) => {
         if (restored) {
           setAuth(restored.userInfo, restored.accessToken, restored.folderId);
@@ -86,17 +120,23 @@ export default function AppLayout() {
       return;
     }
 
-    setRestoring(true);
-    void restoreAuthSession(userEmail, myCloudPlayerFolderId)
-      .then((restored) => {
-        if (restored) {
-          setAuth(restored.userInfo, restored.accessToken, restored.folderId);
-          setSessionExpired(false);
-        } else {
-          setSessionExpired(true);
-        }
-      })
-      .finally(() => setRestoring(false));
+    // Try cookie / silent restore (Netlify long session or GIS)
+    if (authed || useNetlifyAuth()) {
+      setRestoring(true);
+      void restoreAuthSession(userEmail, myCloudPlayerFolderId)
+        .then((restored) => {
+          if (restored) {
+            setAuth(restored.userInfo, restored.accessToken, restored.folderId);
+            setSessionExpired(false);
+          } else if (authed) {
+            setSessionExpired(true);
+          }
+        })
+        .finally(() => setRestoring(false));
+      return;
+    }
+
+    setRestoring(false);
   }, [hydrated, setAuth, setSessionExpired]);
 
   useEffect(() => {
@@ -108,6 +148,10 @@ export default function AppLayout() {
     if (reconnecting) return;
     setReconnecting(true);
     try {
+      if (useNetlifyAuth()) {
+        startNetlifySignIn();
+        return;
+      }
       const result = await signIn();
       setAuth(result.userInfo, result.accessToken, result.folderId);
       setSessionExpired(false);
@@ -132,7 +176,7 @@ export default function AppLayout() {
   }
 
   if (!isAuthenticated) {
-    return <LoginPage />;
+    return <LoginPage initialError={authError} />;
   }
 
   return (

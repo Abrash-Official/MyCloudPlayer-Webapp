@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Icons } from '../components/Icons';
-import { signIn, signOut } from '../api/auth';
+import { signIn, signOut, startNetlifySignIn, useNetlifyAuth } from '../api/auth';
 import { useStore } from '../store/useStore';
 import type { ThemeMode } from '../types';
 
@@ -32,6 +32,10 @@ export default function SettingsPage() {
     if (connecting) return;
     setConnecting(true);
     try {
+      if (useNetlifyAuth()) {
+        startNetlifySignIn();
+        return;
+      }
       const result = await signIn();
       setAuth(result.userInfo, result.accessToken, result.folderId);
       window.alert('Google Drive connected. Open Library and refresh to sync.');

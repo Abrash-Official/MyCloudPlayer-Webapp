@@ -37,7 +37,7 @@ interface TokenResponse {
   error_description?: string;
 }
 
-/** Prevents parallel GIS token popups / races. */
+/** Prevents parallel token refreshes. */
 let refreshInFlight: Promise<string> | null = null;
 
 function getClientId(): string {
@@ -48,6 +48,26 @@ function getClientId(): string {
     );
   }
   return id;
+}
+
+/** Netlify Functions base (same origin in production). */
+export function authFunctionsBase(): string {
+  const configured = import.meta.env.VITE_AUTH_BASE_URL;
+  if (configured) return configured.replace(/\/$/, '');
+  return '';
+}
+
+function authUrl(path: string): string {
+  return `${authFunctionsBase()}${path}`;
+}
+
+/** Prefer long-session Netlify OAuth on deployed site (or when forced). */
+export function useNetlifyAuth(): boolean {
+  if (import.meta.env.VITE_USE_NETLIFY_AUTH === 'true') return true;
+  if (import.meta.env.VITE_USE_NETLIFY_AUTH === 'false') return false;
+  if (typeof window === 'undefined') return false;
+  const host = window.location.hostname;
+  return host.endsWith('netlify.app') || Boolean(import.meta.env.PROD);
 }
 
 function waitForGis(timeoutMs = 10000): Promise<void> {
@@ -127,7 +147,50 @@ function applyToken(accessToken: string, expiresIn: number) {
   useStore.getState().setSessionExpired(false);
 }
 
+async function fetchNetlifyAccessToken(): Promise<{
+  accessToken: string;
+  expiresIn: number;
+}> {
+  const res = await fetch(authUrl('/.netlify/functions/auth-token'), {
+    method: 'GET',
+    credentials: 'include',
+  });
+  const data = (await res.json().catch(() => ({}))) as {
+    access_token?: string;
+    expires_in?: number;
+    error?: string;
+  };
+  if (!res.ok || !data.access_token) {
+    throw new Error(data.error || 'Session expired');
+  }
+  return {
+    accessToken: data.access_token,
+    expiresIn: Number(data.expires_in ?? 3600),
+  };
+}
+
+/** Start Google login via Netlify (redirect). Page navigates away. */
+export function startNetlifySignIn(): void {
+  window.location.href = authUrl('/.netlify/functions/auth-login');
+}
+
+/**
+ * After OAuth redirect (?auth=success), load access token + Drive folder.
+ */
+export async function completeNetlifySignIn(): Promise<AuthResult> {
+  const { accessToken, expiresIn } = await fetchNetlifyAccessToken();
+  applyToken(accessToken, expiresIn);
+  const userInfo = await fetchUserInfo(accessToken);
+  const folderId = await ensureMyCloudPlayerFolder(accessToken);
+  return { userInfo, accessToken, folderId };
+}
+
 export async function signIn(): Promise<AuthResult> {
+  if (useNetlifyAuth()) {
+    startNetlifySignIn();
+    // Navigation in progress
+    return new Promise(() => undefined);
+  }
   const { accessToken, expiresIn } = await requestAccessToken('consent');
   const userInfo = await fetchUserInfo(accessToken);
   const folderId = await ensureMyCloudPlayerFolder(accessToken);
@@ -135,9 +198,11 @@ export async function signIn(): Promise<AuthResult> {
   return { userInfo, accessToken, folderId };
 }
 
-/** Try silent token refresh (works if user previously consented in this browser). */
 export async function silentSignIn(): Promise<AuthResult | null> {
   try {
+    if (useNetlifyAuth()) {
+      return await completeNetlifySignIn();
+    }
     const { accessToken, expiresIn } = await requestAccessToken('');
     const userInfo = await fetchUserInfo(accessToken);
     const folderId = await ensureMyCloudPlayerFolder(accessToken);
@@ -152,6 +217,15 @@ export async function restoreAuthSession(
   savedEmail: string | null,
   savedFolderId: string | null
 ): Promise<AuthResult | null> {
+  // With Netlify cookie sessions we can restore even without saved email
+  if (useNetlifyAuth()) {
+    try {
+      return await completeNetlifySignIn();
+    } catch {
+      if (!savedEmail || !savedFolderId) return null;
+      return null;
+    }
+  }
   if (!savedEmail || !savedFolderId) return null;
   return silentSignIn();
 }
@@ -163,10 +237,6 @@ function hasUsableToken(skewMs = 60_000): boolean {
   );
 }
 
-/**
- * Returns a valid access token. Uses persisted token when still fresh,
- * otherwise silently refreshes via Google Identity Services (no login UI).
- */
 export async function getFreshAccessToken(): Promise<string> {
   if (hasUsableToken(60_000)) {
     return useStore.getState().accessToken!;
@@ -176,12 +246,15 @@ export async function getFreshAccessToken(): Promise<string> {
 
   refreshInFlight = (async () => {
     try {
+      if (useNetlifyAuth()) {
+        const { accessToken, expiresIn } = await fetchNetlifyAccessToken();
+        applyToken(accessToken, expiresIn);
+        return accessToken;
+      }
       const { accessToken: fresh, expiresIn } = await requestAccessToken('');
       applyToken(fresh, expiresIn);
       return fresh;
     } catch {
-      // Last resort: if token only just expired, still return it for one more try
-      // (Drive may accept briefly); otherwise mark session expired.
       const { accessToken, tokenExpiresAt } = useStore.getState();
       if (
         accessToken &&
@@ -200,12 +273,15 @@ export async function getFreshAccessToken(): Promise<string> {
   return refreshInFlight;
 }
 
-/** Keep the session alive while the app is open (Google tokens last ~1 hour). */
 export function startTokenKeepAlive(): () => void {
   const refreshIfNeeded = () => {
     const { isAuthenticated, userEmail, myCloudPlayerFolderId } =
       useStore.getState();
-    if (!isAuthenticated || !userEmail || !myCloudPlayerFolderId) return;
+    if (!isAuthenticated && !useNetlifyAuth()) return;
+    if (!isAuthenticated && !userEmail && !myCloudPlayerFolderId) {
+      // Still try Netlify cookie refresh if we might have a session
+      if (!useNetlifyAuth()) return;
+    }
 
     if (hasUsableToken(5 * 60_000)) return;
 
@@ -232,6 +308,17 @@ export function startTokenKeepAlive(): () => void {
 }
 
 export async function signOut(): Promise<void> {
+  if (useNetlifyAuth()) {
+    try {
+      await fetch(authUrl('/.netlify/functions/auth-logout'), {
+        method: 'POST',
+        credentials: 'include',
+      });
+    } catch {
+      /* ignore */
+    }
+  }
+
   const token = useStore.getState().accessToken;
   await waitForGis().catch(() => undefined);
   if (token && window.google?.accounts?.oauth2?.revoke) {
