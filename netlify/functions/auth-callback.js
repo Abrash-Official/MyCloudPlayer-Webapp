@@ -1,4 +1,4 @@
-const {
+import {
   COOKIE_RT,
   COOKIE_STATE,
   RT_MAX_AGE,
@@ -9,10 +9,9 @@ const {
   parseCookies,
   cookie,
   redirect,
-  json,
-} = require('../lib/session');
+} from '../lib/session.js';
 
-exports.handler = async (event) => {
+export async function handler(event) {
   const origin = siteOrigin(event);
   try {
     const { clientId, clientSecret, sessionSecret } = requireConfig();
@@ -60,4 +59,4 @@ exports.handler = async (event) => {
     const msg = err instanceof Error ? err.message : 'auth-callback failed';
     return redirect(`${origin}/?auth=error&message=${encodeURIComponent(msg)}`);
   }
-};
+}

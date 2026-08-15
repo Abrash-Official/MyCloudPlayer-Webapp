@@ -1,6 +1,6 @@
-const { COOKIE_RT, COOKIE_STATE, cookie, json } = require('../lib/session');
+import { COOKIE_RT, COOKIE_STATE, cookie, json } from '../lib/session.js';
 
-exports.handler = async (event) => {
+export async function handler(event) {
   if (event.httpMethod === 'OPTIONS') {
     return {
       statusCode: 204,
@@ -23,4 +23,4 @@ exports.handler = async (event) => {
       ],
     }
   );
-};
+}

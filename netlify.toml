@@ -5,12 +5,10 @@
 
 [functions]
   node_bundler = "esbuild"
-  external_node_modules = []
 
 [functions."*"]
   included_files = ["netlify/lib/**"]
 
-# SPA fallback (functions still take priority for /.netlify/functions/*)
 [[redirects]]
   from = "/*"
   to = "/index.html"

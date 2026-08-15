@@ -1,5 +1,5 @@
-const crypto = require('crypto');
-const {
+import crypto from 'node:crypto';
+import {
   SCOPES,
   COOKIE_STATE,
   requireConfig,
@@ -7,9 +7,9 @@ const {
   cookie,
   redirect,
   json,
-} = require('../lib/session');
+} from '../lib/session.js';
 
-exports.handler = async (event) => {
+export async function handler(event) {
   try {
     const { clientId } = requireConfig();
     const state = crypto.randomBytes(16).toString('hex');
@@ -32,4 +32,4 @@ exports.handler = async (event) => {
       error: err instanceof Error ? err.message : 'auth-login failed',
     });
   }
-};
+}

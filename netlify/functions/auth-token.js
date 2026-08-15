@@ -1,4 +1,4 @@
-const {
+import {
   COOKIE_RT,
   RT_MAX_AGE,
   requireConfig,
@@ -7,9 +7,9 @@ const {
   parseCookies,
   cookie,
   json,
-} = require('../lib/session');
+} from '../lib/session.js';
 
-exports.handler = async (event) => {
+export async function handler(event) {
   if (event.httpMethod === 'OPTIONS') {
     return {
       statusCode: 204,
@@ -86,4 +86,4 @@ exports.handler = async (event) => {
       error: err instanceof Error ? err.message : 'auth-token failed',
     });
   }
-};
+}

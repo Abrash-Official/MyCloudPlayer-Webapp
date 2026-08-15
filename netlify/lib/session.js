@@ -1,6 +1,6 @@
-const crypto = require('crypto');
+import crypto from 'node:crypto';
 
-const SCOPES = [
+export const SCOPES = [
   'https://www.googleapis.com/auth/drive.file',
   'https://www.googleapis.com/auth/drive.readonly',
   'openid',
@@ -8,9 +8,9 @@ const SCOPES = [
   'email',
 ].join(' ');
 
-const COOKIE_RT = 'mcp_rt';
-const COOKIE_STATE = 'mcp_oauth_state';
-const RT_MAX_AGE = 60 * 24 * 60 * 60; // 60 days
+export const COOKIE_RT = 'mcp_rt';
+export const COOKIE_STATE = 'mcp_oauth_state';
+export const RT_MAX_AGE = 60 * 24 * 60 * 60; // 60 days
 
 function getClientId() {
   return (
@@ -28,18 +28,18 @@ function getSessionSecret() {
   return process.env.SESSION_SECRET || '';
 }
 
-function siteOrigin(event) {
+export function siteOrigin(event) {
   const proto = event.headers['x-forwarded-proto'] || 'https';
   const host = event.headers['x-forwarded-host'] || event.headers.host;
   return `${proto}://${host}`;
 }
 
-function redirectUri(event) {
+export function redirectUri(event) {
   if (process.env.OAUTH_REDIRECT_URI) return process.env.OAUTH_REDIRECT_URI;
   return `${siteOrigin(event)}/.netlify/functions/auth-callback`;
 }
 
-function requireConfig() {
+export function requireConfig() {
   const clientId = getClientId();
   const clientSecret = getClientSecret();
   const sessionSecret = getSessionSecret();
@@ -58,7 +58,7 @@ function deriveKey(sessionSecret) {
   return crypto.createHash('sha256').update(sessionSecret).digest();
 }
 
-function encrypt(plaintext, sessionSecret) {
+export function encrypt(plaintext, sessionSecret) {
   const key = deriveKey(sessionSecret);
   const iv = crypto.randomBytes(12);
   const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
@@ -67,7 +67,7 @@ function encrypt(plaintext, sessionSecret) {
   return Buffer.concat([iv, tag, enc]).toString('base64url');
 }
 
-function decrypt(payload, sessionSecret) {
+export function decrypt(payload, sessionSecret) {
   const buf = Buffer.from(payload, 'base64url');
   const iv = buf.subarray(0, 12);
   const tag = buf.subarray(12, 28);
@@ -78,7 +78,7 @@ function decrypt(payload, sessionSecret) {
   return Buffer.concat([decipher.update(data), decipher.final()]).toString('utf8');
 }
 
-function parseCookies(header) {
+export function parseCookies(header) {
   const out = {};
   if (!header) return out;
   for (const part of header.split(';')) {
@@ -91,7 +91,7 @@ function parseCookies(header) {
   return out;
 }
 
-function cookie(name, value, { maxAge, httpOnly = true, clear = false } = {}) {
+export function cookie(name, value, { maxAge, httpOnly = true, clear = false } = {}) {
   const parts = [
     `${name}=${clear ? '' : encodeURIComponent(value)}`,
     'Path=/',
@@ -104,7 +104,7 @@ function cookie(name, value, { maxAge, httpOnly = true, clear = false } = {}) {
   return parts.join('; ');
 }
 
-function json(status, body, extraHeaders = {}) {
+export function json(status, body, extraHeaders = {}) {
   const { 'Set-Cookie': setCookie, ...rest } = extraHeaders;
   const headers = {
     'Content-Type': 'application/json',
@@ -124,7 +124,7 @@ function json(status, body, extraHeaders = {}) {
   return response;
 }
 
-function redirect(location, setCookies = []) {
+export function redirect(location, setCookies = []) {
   const response = {
     statusCode: 302,
     headers: {
@@ -138,20 +138,3 @@ function redirect(location, setCookies = []) {
   }
   return response;
 }
-
-module.exports = {
-  SCOPES,
-  COOKIE_RT,
-  COOKIE_STATE,
-  RT_MAX_AGE,
-  requireConfig,
-  getClientId,
-  siteOrigin,
-  redirectUri,
-  encrypt,
-  decrypt,
-  parseCookies,
-  cookie,
-  json,
-  redirect,
-};
