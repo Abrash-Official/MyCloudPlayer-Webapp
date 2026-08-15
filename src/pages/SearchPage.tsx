@@ -14,6 +14,7 @@ import {
 import { buildPlayQueue } from '../utils/playerQueue';
 import { playQueue } from '../utils/playback';
 import { buildSongFilename } from '../utils/filename';
+import LoadingState, { ProgressBar } from '../components/LoadingState';
 import type { DownloadState, LibraryItem, YouTubeSearchResult } from '../types';
 
 export default function SearchPage() {
@@ -247,14 +248,34 @@ export default function SearchPage() {
                   ? 'Download to Drive'
                   : statusLabel}
             </button>
-            {statusLabel && downloadState.status !== 'done' ? (
-              <p className="song-sub" style={{ marginTop: 8 }}>
-                {statusLabel}
+            {downloadState.status === 'extracting' ? (
+              <div style={{ marginTop: 14 }}>
+                <LoadingState label="Extracting audio…" compact />
+              </div>
+            ) : null}
+            {downloadState.status === 'downloading' ||
+            downloadState.status === 'uploading' ? (
+              <div style={{ marginTop: 14 }}>
+                <ProgressBar
+                  progress={downloadState.progress}
+                  label={
+                    downloadState.status === 'downloading'
+                      ? 'Downloading…'
+                      : 'Uploading to Drive…'
+                  }
+                />
+              </div>
+            ) : null}
+            {downloadState.status === 'done' ? (
+              <p className="song-sub" style={{ marginTop: 8, color: 'var(--primary)' }}>
+                Saved to Google Drive
               </p>
             ) : null}
           </div>
         </div>
       ) : null}
+
+      {isSearching ? <LoadingState label="Searching…" rows={3} /> : null}
 
       {!isSearching &&
       !result &&

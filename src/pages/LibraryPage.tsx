@@ -18,6 +18,7 @@ import { buildPlayQueue } from '../utils/playerQueue';
 import { playQueue, reshuffleActiveQueue } from '../utils/playback';
 import { searchLocalLibrary } from '../utils/localSearch';
 import { cycleRepeatMode } from '../utils/repeatMode';
+import LoadingState from '../components/LoadingState';
 import type { LibraryItem } from '../types';
 
 type LibTab = 'songs' | 'playlists';
@@ -314,10 +315,7 @@ export default function LibraryPage() {
           ) : null}
 
           {isLoadingLibrary && displaySongs.length === 0 ? (
-            <div className="empty">
-              <span className="spinner" />
-              <p>Syncing your library…</p>
-            </div>
+            <LoadingState label="Syncing your library…" rows={6} />
           ) : displaySongs.length === 0 ? (
             <div className="empty">
               <Icons.music size={64} />

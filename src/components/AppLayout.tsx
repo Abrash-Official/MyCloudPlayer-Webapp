@@ -8,6 +8,8 @@ import { useAppTheme } from '../hooks/useAppTheme';
 import { useStore } from '../store/useStore';
 import { useEffect, useState } from 'react';
 import { restoreAuthSession } from '../api/auth';
+import { usePlaybackControls } from '../hooks/usePlaybackControls';
+import LoadingState from './LoadingState';
 
 export default function AppLayout() {
   const { colors, resolved } = useAppTheme();
@@ -16,6 +18,8 @@ export default function AppLayout() {
   const setAuth = useStore((s) => s.setAuth);
   const [hydrated, setHydrated] = useState(() => useStore.persist.hasHydrated());
   const [restoring, setRestoring] = useState(true);
+
+  usePlaybackControls(isAuthenticated && hydrated && !restoring);
 
   useEffect(() => {
     if (hydrated) return;
@@ -78,8 +82,7 @@ export default function AppLayout() {
         style={{ background: colors.background, color: colors.text }}
       >
         <div className="login-card" style={{ alignItems: 'center' }}>
-          <span className="spinner" />
-          <p className="login-sub">Starting MyCloudPlayer…</p>
+          <LoadingState label="Starting MyCloudPlayer…" compact />
         </div>
       </div>
     );

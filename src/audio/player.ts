@@ -20,16 +20,19 @@ class WebAudioPlayer {
 
   constructor() {
     this.audio.preload = 'auto';
+    this.setupMediaSession();
 
     this.audio.addEventListener('play', () => {
       useStore.getState().setPlaying(true);
       useStore.getState().setBuffering(false);
+      this.setMediaPlaybackState('playing');
       this.startProgressLoop();
       this.emit();
     });
 
     this.audio.addEventListener('pause', () => {
       useStore.getState().setPlaying(false);
+      this.setMediaPlaybackState('paused');
       this.stopProgressLoop();
       this.emit();
     });
@@ -76,6 +79,7 @@ class WebAudioPlayer {
       useStore
         .getState()
         .setProgress(this.audio.currentTime || 0, this.audio.duration || 0);
+      this.updateMediaPositionState();
     }, 250);
   }
 
@@ -83,6 +87,98 @@ class WebAudioPlayer {
     if (this.progressTimer != null) {
       clearInterval(this.progressTimer);
       this.progressTimer = null;
+    }
+  }
+
+  /** Headset / lock-screen / OS media keys (next, previous, pause). */
+  private setupMediaSession() {
+    if (typeof navigator === 'undefined' || !('mediaSession' in navigator)) {
+      return;
+    }
+    const ms = navigator.mediaSession;
+    const bind = (
+      action: MediaSessionAction,
+      handler: MediaSessionActionHandler
+    ) => {
+      try {
+        ms.setActionHandler(action, handler);
+      } catch {
+        /* older browsers may reject some actions */
+      }
+    };
+
+    bind('play', () => {
+      void this.play();
+    });
+    bind('pause', () => {
+      this.pause();
+    });
+    bind('stop', () => {
+      this.pause();
+      void this.seekTo(0);
+    });
+    bind('previoustrack', () => {
+      void this.skipToPrevious();
+    });
+    bind('nexttrack', () => {
+      void this.skipToNext();
+    });
+    bind('seekbackward', (details) => {
+      const offset = details.seekOffset ?? 10;
+      void this.seekTo(Math.max(0, this.audio.currentTime - offset));
+    });
+    bind('seekforward', (details) => {
+      const offset = details.seekOffset ?? 10;
+      const dur = this.audio.duration || 0;
+      void this.seekTo(Math.min(dur || Number.MAX_SAFE_INTEGER, this.audio.currentTime + offset));
+    });
+    bind('seekto', (details) => {
+      if (typeof details.seekTime === 'number') {
+        void this.seekTo(details.seekTime);
+      }
+    });
+  }
+
+  private setMediaPlaybackState(state: MediaSessionPlaybackState) {
+    if (typeof navigator === 'undefined' || !('mediaSession' in navigator)) {
+      return;
+    }
+    try {
+      navigator.mediaSession.playbackState = state;
+    } catch {
+      /* ignore */
+    }
+  }
+
+  private updateMediaSessionMetadata(track: PlayerTrack) {
+    if (typeof navigator === 'undefined' || !('mediaSession' in navigator)) {
+      return;
+    }
+    try {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: track.title || 'Unknown track',
+        artist: track.artist || 'MyCloudPlayer',
+        album: 'MyCloudPlayer',
+      });
+    } catch {
+      /* ignore */
+    }
+  }
+
+  private updateMediaPositionState() {
+    if (typeof navigator === 'undefined' || !('mediaSession' in navigator)) {
+      return;
+    }
+    const duration = this.audio.duration;
+    if (!Number.isFinite(duration) || duration <= 0) return;
+    try {
+      navigator.mediaSession.setPositionState({
+        duration,
+        playbackRate: this.audio.playbackRate || 1,
+        position: Math.min(this.audio.currentTime || 0, duration),
+      });
+    } catch {
+      /* ignore */
     }
   }
 
@@ -409,6 +505,7 @@ class WebAudioPlayer {
     useStore.getState().setBuffering(!wasCached);
     useStore.getState().setPlaybackSession(this.queue, index, track);
     useStore.getState().setCurrentTrack(track);
+    this.updateMediaSessionMetadata(track);
     this.emit();
 
     // Start warming neighbors as soon as we commit to this track

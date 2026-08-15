@@ -17,6 +17,7 @@ import { buildPlayQueue } from '../utils/playerQueue';
 import { playQueue, reshuffleActiveQueue } from '../utils/playback';
 import { searchLocalLibrary } from '../utils/localSearch';
 import { stripAudioExtension } from '../utils/filename';
+import LoadingState from '../components/LoadingState';
 import type { DriveFile, DriveFolder, LibraryItem } from '../types';
 
 export default function PlaylistPage() {
@@ -154,10 +155,7 @@ export default function PlaylistPage() {
       </header>
 
       {loading && playlistSongs.length === 0 ? (
-        <div className="empty">
-          <span className="spinner" />
-          <p>Loading playlist…</p>
-        </div>
+        <LoadingState label="Loading playlist…" rows={6} />
       ) : (
         <>
           {playlistSongs.length > 0 ? (
