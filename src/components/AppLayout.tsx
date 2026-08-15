@@ -7,7 +7,7 @@ import LoginPage from '../pages/LoginPage';
 import { useAppTheme } from '../hooks/useAppTheme';
 import { useStore } from '../store/useStore';
 import { useEffect, useState } from 'react';
-import { restoreAuthSession } from '../api/auth';
+import { restoreAuthSession, startTokenKeepAlive, signIn } from '../api/auth';
 import { usePlaybackControls } from '../hooks/usePlaybackControls';
 import LoadingState from './LoadingState';
 
@@ -15,9 +15,12 @@ export default function AppLayout() {
   const { colors, resolved } = useAppTheme();
   const currentTrack = useStore((s) => s.currentTrack);
   const isAuthenticated = useStore((s) => s.isAuthenticated);
+  const sessionExpired = useStore((s) => s.sessionExpired);
   const setAuth = useStore((s) => s.setAuth);
+  const setSessionExpired = useStore((s) => s.setSessionExpired);
   const [hydrated, setHydrated] = useState(() => useStore.persist.hasHydrated());
   const [restoring, setRestoring] = useState(true);
+  const [reconnecting, setReconnecting] = useState(false);
 
   usePlaybackControls(isAuthenticated && hydrated && !restoring);
 
@@ -52,16 +55,34 @@ export default function AppLayout() {
   useEffect(() => {
     if (!hydrated) return;
 
-    const { userEmail, myCloudPlayerFolderId, accessToken, isAuthenticated } =
-      useStore.getState();
+    const {
+      userEmail,
+      myCloudPlayerFolderId,
+      accessToken,
+      tokenExpiresAt,
+      isAuthenticated: authed,
+    } = useStore.getState();
 
-    if (!isAuthenticated || !userEmail || !myCloudPlayerFolderId) {
+    if (!authed || !userEmail || !myCloudPlayerFolderId) {
       setRestoring(false);
       return;
     }
 
-    if (accessToken) {
+    const tokenFresh =
+      Boolean(accessToken) &&
+      Boolean(tokenExpiresAt) &&
+      (tokenExpiresAt as number) > Date.now() + 15_000;
+
+    // Stay in the app immediately when we still have a valid stored token
+    if (tokenFresh) {
       setRestoring(false);
+      setSessionExpired(false);
+      // Quietly extend the session in the background
+      void restoreAuthSession(userEmail, myCloudPlayerFolderId).then((restored) => {
+        if (restored) {
+          setAuth(restored.userInfo, restored.accessToken, restored.folderId);
+        }
+      });
       return;
     }
 
@@ -70,10 +91,32 @@ export default function AppLayout() {
       .then((restored) => {
         if (restored) {
           setAuth(restored.userInfo, restored.accessToken, restored.folderId);
+          setSessionExpired(false);
+        } else {
+          setSessionExpired(true);
         }
       })
       .finally(() => setRestoring(false));
-  }, [hydrated, setAuth]);
+  }, [hydrated, setAuth, setSessionExpired]);
+
+  useEffect(() => {
+    if (!hydrated || !isAuthenticated || restoring) return;
+    return startTokenKeepAlive();
+  }, [hydrated, isAuthenticated, restoring]);
+
+  const handleReconnect = async () => {
+    if (reconnecting) return;
+    setReconnecting(true);
+    try {
+      const result = await signIn();
+      setAuth(result.userInfo, result.accessToken, result.folderId);
+      setSessionExpired(false);
+    } catch {
+      /* user cancelled */
+    } finally {
+      setReconnecting(false);
+    }
+  };
 
   if (!hydrated || restoring) {
     return (
@@ -94,6 +137,21 @@ export default function AppLayout() {
 
   return (
     <div className="app-shell">
+      {sessionExpired ? (
+        <div className="session-banner" role="status">
+          <span>Google session expired — reconnect to keep playing.</span>
+          <button
+            type="button"
+            className="btn"
+            disabled={reconnecting}
+            onClick={() => void handleReconnect()}
+          >
+            {reconnecting ? <span className="spinner" /> : null}
+            Reconnect
+          </button>
+        </div>
+      ) : null}
+
       <header className="top-nav" aria-label="Main">
         <NavLink to="/" end className="top-nav-brand">
           <span className="top-nav-logo">

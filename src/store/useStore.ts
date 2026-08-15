@@ -81,6 +81,8 @@ interface AppState extends AuthSlice, SettingsSlice, LibrarySlice, PlayerSlice {
   toggleShuffle: () => void;
   setPlayerOpen: (open: boolean) => void;
   setQueueOpen: (open: boolean) => void;
+  sessionExpired: boolean;
+  setSessionExpired: (expired: boolean) => void;
 }
 
 export const useStore = create<AppState>()(
@@ -114,6 +116,7 @@ export const useStore = create<AppState>()(
       repeatMode: 'off',
       isPlayerOpen: false,
       isQueueOpen: false,
+      sessionExpired: false,
 
       setAuth: (userInfo, accessToken, folderId, expiresIn = 3600) =>
         set({
@@ -125,12 +128,14 @@ export const useStore = create<AppState>()(
           accessToken,
           tokenExpiresAt: Date.now() + expiresIn * 1000,
           myCloudPlayerFolderId: folderId,
+          sessionExpired: false,
         }),
 
       updateAccessToken: (token, expiresIn = 3600) =>
         set({
           accessToken: token,
           tokenExpiresAt: Date.now() + expiresIn * 1000,
+          sessionExpired: false,
         }),
 
       clearAuth: () =>
@@ -143,8 +148,13 @@ export const useStore = create<AppState>()(
           accessToken: null,
           tokenExpiresAt: null,
           myCloudPlayerFolderId: null,
+          sessionExpired: false,
           songs: [],
           playlists: [],
+          currentTrack: null,
+          playbackQueue: [],
+          playbackIndex: 0,
+          isPlaying: false,
         }),
 
       setYoutubeApiKey: (key) => set({ youtubeApiKey: key }),
@@ -180,6 +190,7 @@ export const useStore = create<AppState>()(
         set((state) => ({ shuffleEnabled: !state.shuffleEnabled })),
       setPlayerOpen: (open) => set({ isPlayerOpen: open }),
       setQueueOpen: (open) => set({ isQueueOpen: open }),
+      setSessionExpired: (expired) => set({ sessionExpired: expired }),
     }),
     {
       name: 'mycloudplayer-web-storage',
@@ -198,6 +209,9 @@ export const useStore = create<AppState>()(
         userEmail: state.userEmail,
         userName: state.userName,
         userPhoto: state.userPhoto,
+        // Persist token so reload stays signed in until Google expires it (~1h)
+        accessToken: state.accessToken,
+        tokenExpiresAt: state.tokenExpiresAt,
         songs: state.songs,
         playlists: state.playlists,
       }),

@@ -323,6 +323,34 @@ class WebAudioPlayer {
     await this.loadAndPlay(index);
   }
 
+  async addToQueue(track: PlayerTrack): Promise<void> {
+    this.ensureQueueHydrated();
+    if (this.queue.length === 0) {
+      await this.playQueue([track], 0, { forceRestart: true });
+      return;
+    }
+    this.queue = [...this.queue, track];
+    useStore
+      .getState()
+      .setPlaybackSession(this.queue, this.index, this.queue[this.index]);
+    this.prefetchAround(this.index);
+  }
+
+  /** Insert right after the current track and start playing it. */
+  async playNext(track: PlayerTrack): Promise<void> {
+    this.ensureQueueHydrated();
+    if (this.queue.length === 0) {
+      await this.playQueue([track], 0, { forceRestart: true });
+      return;
+    }
+    const insertAt = this.index + 1;
+    const next = [...this.queue];
+    next.splice(insertAt, 0, track);
+    this.queue = next;
+    useStore.getState().setPlaybackSession(this.queue, this.index, this.queue[this.index]);
+    await this.loadAndPlay(insertAt);
+  }
+
   async removeAt(index: number): Promise<void> {
     this.ensureQueueHydrated();
     if (index < 0 || index >= this.queue.length) return;
@@ -668,6 +696,11 @@ class WebAudioPlayer {
     } catch (err) {
       if (generation !== this.loadGeneration) return;
       if (err instanceof Error && err.message === 'aborted') return;
+      // Stop leftover audio so title/audio can't desync when Drive auth fails
+      this.audio.pause();
+      this.audio.removeAttribute('src');
+      this.audio.load();
+      this.stopProgressLoop();
       useStore.getState().setBuffering(false);
       useStore.getState().setPlaying(false);
       this.emit();

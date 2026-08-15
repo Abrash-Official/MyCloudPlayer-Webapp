@@ -187,31 +187,31 @@ export default function QueueModal() {
           ) : (
             previous.map((item) => (
               <div className="song-row" key={`h-${item.queueIndex}-${item.track.id}`}>
+                <div className="song-art">
+                  <Icons.music size={16} />
+                </div>
+                <div className="song-text" style={{ minWidth: 0, flex: 1 }}>
+                  <div className="song-title">{item.track.title}</div>
+                  <div className="song-sub">{item.track.artist}</div>
+                </div>
                 <button
                   type="button"
-                  className="song-text"
-                  style={{ display: 'flex', gap: 12, alignItems: 'center' }}
+                  className="icon-btn"
+                  title="Add to queue"
+                  aria-label="Add to queue"
                   onClick={() => {
-                    void audioPlayer.skipToIndex(item.queueIndex).then(() => {
-                      setTab('upnext');
-                    });
+                    void audioPlayer.addToQueue(item.track);
                   }}
                 >
-                  <div className="song-art">
-                    <Icons.skipBack size={16} />
-                  </div>
-                  <div style={{ minWidth: 0, flex: 1 }}>
-                    <div className="song-title">{item.track.title}</div>
-                    <div className="song-sub">{item.track.artist}</div>
-                  </div>
+                  <Icons.list size={18} />
                 </button>
                 <button
                   type="button"
                   className="icon-btn"
+                  title="Play next"
+                  aria-label="Play next"
                   onClick={() => {
-                    void audioPlayer.skipToIndex(item.queueIndex).then(() => {
-                      setTab('upnext');
-                    });
+                    void audioPlayer.playNext(item.track).then(() => setTab('upnext'));
                   }}
                 >
                   <Icons.play size={16} />

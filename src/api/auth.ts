@@ -37,6 +37,9 @@ interface TokenResponse {
   error_description?: string;
 }
 
+/** Prevents parallel GIS token popups / races. */
+let refreshInFlight: Promise<string> | null = null;
+
 function getClientId(): string {
   const id = import.meta.env.VITE_GOOGLE_CLIENT_ID;
   if (!id || id.includes('your-google')) {
@@ -84,44 +87,51 @@ function requestAccessToken(prompt: '' | 'consent' = 'consent'): Promise<{
   accessToken: string;
   expiresIn: number;
 }> {
-  return new Promise(async (resolve, reject) => {
-    try {
-      await waitForGis();
-      const client = window.google!.accounts.oauth2.initTokenClient({
-        client_id: getClientId(),
-        scope: SCOPES,
-        callback: (response) => {
-          if (response.error || !response.access_token) {
-            reject(
-              new Error(
-                response.error_description ||
-                  response.error ||
-                  'Google sign-in was cancelled'
-              )
-            );
-            return;
-          }
-          resolve({
-            accessToken: response.access_token,
-            expiresIn: Number(response.expires_in ?? 3600),
-          });
-        },
-        error_callback: (error) => {
-          reject(new Error(error.message || error.type || 'Google sign-in failed'));
-        },
-      });
-      client.requestAccessToken({ prompt });
-    } catch (err) {
-      reject(err);
-    }
+  return new Promise((resolve, reject) => {
+    void (async () => {
+      try {
+        await waitForGis();
+        const client = window.google!.accounts.oauth2.initTokenClient({
+          client_id: getClientId(),
+          scope: SCOPES,
+          callback: (response) => {
+            if (response.error || !response.access_token) {
+              reject(
+                new Error(
+                  response.error_description ||
+                    response.error ||
+                    'Google sign-in was cancelled'
+                )
+              );
+              return;
+            }
+            resolve({
+              accessToken: response.access_token,
+              expiresIn: Number(response.expires_in ?? 3600),
+            });
+          },
+          error_callback: (error) => {
+            reject(new Error(error.message || error.type || 'Google sign-in failed'));
+          },
+        });
+        client.requestAccessToken({ prompt });
+      } catch (err) {
+        reject(err);
+      }
+    })();
   });
+}
+
+function applyToken(accessToken: string, expiresIn: number) {
+  useStore.getState().updateAccessToken(accessToken, expiresIn);
+  useStore.getState().setSessionExpired(false);
 }
 
 export async function signIn(): Promise<AuthResult> {
   const { accessToken, expiresIn } = await requestAccessToken('consent');
   const userInfo = await fetchUserInfo(accessToken);
   const folderId = await ensureMyCloudPlayerFolder(accessToken);
-  useStore.getState().updateAccessToken(accessToken, expiresIn);
+  applyToken(accessToken, expiresIn);
   return { userInfo, accessToken, folderId };
 }
 
@@ -131,7 +141,7 @@ export async function silentSignIn(): Promise<AuthResult | null> {
     const { accessToken, expiresIn } = await requestAccessToken('');
     const userInfo = await fetchUserInfo(accessToken);
     const folderId = await ensureMyCloudPlayerFolder(accessToken);
-    useStore.getState().updateAccessToken(accessToken, expiresIn);
+    applyToken(accessToken, expiresIn);
     return { userInfo, accessToken, folderId };
   } catch {
     return null;
@@ -146,22 +156,79 @@ export async function restoreAuthSession(
   return silentSignIn();
 }
 
-export async function getFreshAccessToken(): Promise<string> {
+function hasUsableToken(skewMs = 60_000): boolean {
   const { accessToken, tokenExpiresAt } = useStore.getState();
-  const stillValid =
-    accessToken &&
-    tokenExpiresAt &&
-    tokenExpiresAt > Date.now() + 60_000;
+  return Boolean(
+    accessToken && tokenExpiresAt && tokenExpiresAt > Date.now() + skewMs
+  );
+}
 
-  if (stillValid) return accessToken!;
-
-  try {
-    const { accessToken: fresh, expiresIn } = await requestAccessToken('');
-    useStore.getState().updateAccessToken(fresh, expiresIn);
-    return fresh;
-  } catch {
-    throw new Error('Google session expired. Connect again in Settings.');
+/**
+ * Returns a valid access token. Uses persisted token when still fresh,
+ * otherwise silently refreshes via Google Identity Services (no login UI).
+ */
+export async function getFreshAccessToken(): Promise<string> {
+  if (hasUsableToken(60_000)) {
+    return useStore.getState().accessToken!;
   }
+
+  if (refreshInFlight) return refreshInFlight;
+
+  refreshInFlight = (async () => {
+    try {
+      const { accessToken: fresh, expiresIn } = await requestAccessToken('');
+      applyToken(fresh, expiresIn);
+      return fresh;
+    } catch {
+      // Last resort: if token only just expired, still return it for one more try
+      // (Drive may accept briefly); otherwise mark session expired.
+      const { accessToken, tokenExpiresAt } = useStore.getState();
+      if (
+        accessToken &&
+        tokenExpiresAt &&
+        tokenExpiresAt > Date.now() - 120_000
+      ) {
+        return accessToken;
+      }
+      useStore.getState().setSessionExpired(true);
+      throw new Error('Google session expired. Tap Reconnect to continue.');
+    } finally {
+      refreshInFlight = null;
+    }
+  })();
+
+  return refreshInFlight;
+}
+
+/** Keep the session alive while the app is open (Google tokens last ~1 hour). */
+export function startTokenKeepAlive(): () => void {
+  const refreshIfNeeded = () => {
+    const { isAuthenticated, userEmail, myCloudPlayerFolderId } =
+      useStore.getState();
+    if (!isAuthenticated || !userEmail || !myCloudPlayerFolderId) return;
+
+    if (hasUsableToken(5 * 60_000)) return;
+
+    void getFreshAccessToken().catch(() => {
+      /* banner handled via sessionExpired */
+    });
+  };
+
+  refreshIfNeeded();
+  const id = window.setInterval(refreshIfNeeded, 60_000);
+
+  const onFocus = () => refreshIfNeeded();
+  const onVis = () => {
+    if (document.visibilityState === 'visible') refreshIfNeeded();
+  };
+  window.addEventListener('focus', onFocus);
+  document.addEventListener('visibilitychange', onVis);
+
+  return () => {
+    window.clearInterval(id);
+    window.removeEventListener('focus', onFocus);
+    document.removeEventListener('visibilitychange', onVis);
+  };
 }
 
 export async function signOut(): Promise<void> {

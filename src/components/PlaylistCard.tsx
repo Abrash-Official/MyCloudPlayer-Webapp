@@ -1,5 +1,7 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Icons } from './Icons';
+import ConfirmDialog from './ConfirmDialog';
 import type { DriveFolder } from '../types';
 
 interface PlaylistCardProps {
@@ -8,6 +10,8 @@ interface PlaylistCardProps {
 }
 
 export default function PlaylistCard({ playlist, onDelete }: PlaylistCardProps) {
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
   return (
     <div className="playlist-row">
       <Link to={`/playlist/${playlist.id}`} className="playlist-art" state={{ folder: playlist }}>
@@ -25,18 +29,23 @@ export default function PlaylistCard({ playlist, onDelete }: PlaylistCardProps) 
         type="button"
         className="icon-btn"
         aria-label="Delete playlist"
-        onClick={() => {
-          if (
-            window.confirm(
-              `Delete "${playlist.name}"?\nSongs inside will also be removed from Drive.`
-            )
-          ) {
-            onDelete();
-          }
-        }}
+        onClick={() => setConfirmOpen(true)}
       >
         <Icons.more size={18} />
       </button>
+
+      <ConfirmDialog
+        open={confirmOpen}
+        title="Delete playlist?"
+        message={`Delete “${playlist.name}”? Songs inside will also be removed from Drive.`}
+        confirmLabel="Delete"
+        danger
+        onCancel={() => setConfirmOpen(false)}
+        onConfirm={() => {
+          setConfirmOpen(false);
+          onDelete();
+        }}
+      />
     </div>
   );
 }
