@@ -1,6 +1,7 @@
 import { getFreshAccessToken } from '../api/auth';
 import { useStore } from '../store/useStore';
 import type { PlayerTrack, RepeatModeSetting } from '../types';
+import { shuffleQueue } from '../utils/playerQueue';
 
 type Listener = () => void;
 
@@ -342,10 +343,7 @@ class WebAudioPlayer {
     if (!this.ensureQueueHydrated()) return;
     const next = this.index + 1;
     if (next >= this.queue.length) {
-      const repeat = useStore.getState().repeatMode;
-      if (repeat === 'all') {
-        await this.loadAndPlay(0);
-      }
+      await this.wrapQueueAndContinue();
       return;
     }
     await this.loadAndPlay(next);
@@ -483,12 +481,46 @@ class WebAudioPlayer {
       await this.skipToNext();
       return;
     }
-    if (repeat === 'all') {
+    // End of queue: keep playing forever with the same song count.
+    // Shuffle on → fresh reshuffle; shuffle off → restart current order.
+    await this.wrapQueueAndContinue();
+  }
+
+  /**
+   * Start another lap of the current queue without growing it.
+   * With shuffle, builds a new random order so each cycle feels fresh.
+   */
+  private async wrapQueueAndContinue(): Promise<void> {
+    if (this.queue.length === 0) return;
+
+    const shuffleOn = useStore.getState().shuffleEnabled;
+    if (shuffleOn && this.queue.length > 1) {
+      const justEndedId = this.queue[this.index]?.id;
+      let nextQueue = shuffleQueue(this.queue);
+
+      // Prefer not starting the new lap on the song that just finished.
+      if (nextQueue[0]?.id === justEndedId) {
+        nextQueue = shuffleQueue(this.queue);
+        if (nextQueue[0]?.id === justEndedId && nextQueue.length > 1) {
+          const swapWith = 1 + Math.floor(Math.random() * (nextQueue.length - 1));
+          [nextQueue[0], nextQueue[swapWith]] = [
+            nextQueue[swapWith],
+            nextQueue[0],
+          ];
+        }
+      }
+
+      this.queue = nextQueue;
+      this.index = 0;
+      useStore
+        .getState()
+        .setPlaybackSession(this.queue, 0, this.queue[0]);
+      this.emit();
       await this.loadAndPlay(0);
       return;
     }
-    useStore.getState().setPlaying(false);
-    await this.seekTo(0);
+
+    await this.loadAndPlay(0);
   }
 
   private keepIds(): Set<string> {
