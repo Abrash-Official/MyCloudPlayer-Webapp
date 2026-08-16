@@ -8,6 +8,8 @@ const PREFETCH_AHEAD = 2;
 const CACHE_LIMIT = 12;
 /** Start playback once this many bytes are buffered (first play feels much faster). */
 const EARLY_PLAY_BYTES = 256 * 1024;
+/** Give up on a hung load so the UI doesn't spin forever. */
+const LOAD_TIMEOUT_MS = 45_000;
 
 class WebAudioPlayer {
   private audio = new Audio();
@@ -20,6 +22,9 @@ class WebAudioPlayer {
   private progressTimer: number | null = null;
   /** Monotonic id so only the latest loadAndPlay applies audio. */
   private loadGeneration = 0;
+  /** Track id whose blob is currently assigned to <audio> (never revoke while active). */
+  private activeBlobTrackId: string | null = null;
+  private playLock: Promise<void> = Promise.resolve();
 
   constructor() {
     this.audio.preload = 'auto';
@@ -45,6 +50,12 @@ class WebAudioPlayer {
       this.emit();
     });
 
+    this.audio.addEventListener('playing', () => {
+      useStore.getState().setBuffering(false);
+      useStore.getState().setPlaying(true);
+      this.emit();
+    });
+
     this.audio.addEventListener('canplay', () => {
       useStore.getState().setBuffering(false);
       this.emit();
@@ -55,6 +66,15 @@ class WebAudioPlayer {
     });
 
     this.audio.addEventListener('error', () => {
+      const badId = this.activeBlobTrackId;
+      this.activeBlobTrackId = null;
+      if (badId) {
+        const url = this.blobCache.get(badId);
+        if (url) {
+          URL.revokeObjectURL(url);
+          this.blobCache.delete(badId);
+        }
+      }
       useStore.getState().setBuffering(false);
       useStore.getState().setPlaying(false);
       this.emit();
@@ -93,7 +113,17 @@ class WebAudioPlayer {
     }
   }
 
-  /** Headset / lock-screen / OS media keys (next, previous, pause). */
+  /** True when <audio> has a real blob/http src (not the page URL after clear). */
+  private hasPlayableSrc(): boolean {
+    const attr = this.audio.getAttribute('src');
+    if (!attr) return false;
+    return (
+      attr.startsWith('blob:') ||
+      attr.startsWith('http://') ||
+      attr.startsWith('https://')
+    );
+  }
+
   private setupMediaSession() {
     if (typeof navigator === 'undefined' || !('mediaSession' in navigator)) {
       return;
@@ -214,7 +244,6 @@ class WebAudioPlayer {
     return this.queue[this.index] ?? null;
   }
 
-  /** Warm cache ahead of a click (hover / library ready). */
   warmTrack(track: PlayerTrack): void {
     if (this.blobCache.has(track.id) || this.inFlight.has(track.id)) return;
     void this.fetchBlobUrl(track).catch(() => {
@@ -240,7 +269,7 @@ class WebAudioPlayer {
       this.queue.length === tracks.length &&
       this.queue.every((t, i) => t.id === tracks[i].id);
 
-    if (sameQueue && useStore.getState().isPlaying) {
+    if (sameQueue && useStore.getState().isPlaying && this.hasPlayableSrc()) {
       this.pause();
       return;
     }
@@ -254,20 +283,24 @@ class WebAudioPlayer {
     await this.loadAndPlay(this.index);
   }
 
+  /** Safe play: recover from dead/revoked blob src by reloading the track. */
   async play(): Promise<void> {
     this.ensureQueueHydrated();
-    if (!this.audio.src) {
-      const track = this.getActiveTrack();
-      if (track) {
-        await this.loadAndPlay(this.index);
-        return;
-      }
+    const track = this.getActiveTrack();
+    if (!track) return;
+
+    if (!this.hasPlayableSrc() || this.audio.error) {
+      await this.loadAndPlay(this.index, { forceReload: true });
       return;
     }
+
     try {
+      useStore.getState().setBuffering(true);
       await this.audio.play();
+      useStore.getState().setBuffering(false);
     } catch {
-      /* autoplay blocked — user gesture required */
+      // Revoked blob, network glitch, or NotAllowed — force a clean reload once
+      await this.loadAndPlay(this.index, { forceReload: true });
     }
   }
 
@@ -276,19 +309,33 @@ class WebAudioPlayer {
   }
 
   async togglePlayPause(): Promise<void> {
-    this.ensureQueueHydrated();
-    if (this.audio.paused) {
-      await this.play();
-    } else {
-      this.pause();
-    }
+    // Serialize rapid clicks so we don't start overlapping loads
+    this.playLock = this.playLock
+      .then(async () => {
+        this.ensureQueueHydrated();
+        if (this.audio.paused || !this.hasPlayableSrc() || this.audio.error) {
+          await this.play();
+        } else {
+          this.pause();
+        }
+      })
+      .catch(() => {
+        useStore.getState().setBuffering(false);
+        useStore.getState().setPlaying(false);
+      });
+    await this.playLock;
   }
 
   async seekTo(seconds: number): Promise<void> {
-    this.audio.currentTime = Math.max(0, seconds);
-    useStore
-      .getState()
-      .setProgress(this.audio.currentTime, this.audio.duration || 0);
+    if (!this.hasPlayableSrc()) return;
+    try {
+      this.audio.currentTime = Math.max(0, seconds);
+      useStore
+        .getState()
+        .setProgress(this.audio.currentTime, this.audio.duration || 0);
+    } catch {
+      /* ignore */
+    }
   }
 
   async skipToNext(): Promise<void> {
@@ -306,7 +353,7 @@ class WebAudioPlayer {
 
   async skipToPrevious(): Promise<void> {
     if (!this.ensureQueueHydrated()) return;
-    if (this.audio.currentTime > 3) {
+    if (this.hasPlayableSrc() && this.audio.currentTime > 3) {
       await this.seekTo(0);
       return;
     }
@@ -336,7 +383,6 @@ class WebAudioPlayer {
     this.prefetchAround(this.index);
   }
 
-  /** Insert right after the current track and start playing it. */
   async playNext(track: PlayerTrack): Promise<void> {
     this.ensureQueueHydrated();
     if (this.queue.length === 0) {
@@ -368,7 +414,7 @@ class WebAudioPlayer {
         this.queue[this.index] ?? null
       );
     if (wasActive && this.queue.length > 0) {
-      await this.loadAndPlay(this.index);
+      await this.loadAndPlay(this.index, { forceReload: true });
     } else if (this.queue.length === 0) {
       this.stopAudioHard();
       useStore.getState().setCurrentTrack(null);
@@ -404,12 +450,26 @@ class WebAudioPlayer {
     this.prefetchAround(this.index);
   }
 
-  private stopAudioHard(): void {
-    this.loadGeneration += 1;
+  private clearAudioElement(): void {
     this.audio.pause();
     this.audio.removeAttribute('src');
     this.audio.load();
+    this.activeBlobTrackId = null;
     this.stopProgressLoop();
+  }
+
+  private stopAudioHard(): void {
+    this.loadGeneration += 1;
+    this.clearAudioElement();
+  }
+
+  private dropCachedBlob(trackId: string) {
+    const url = this.blobCache.get(trackId);
+    if (!url) return;
+    // Never revoke while still assigned to the element
+    if (this.activeBlobTrackId === trackId) return;
+    URL.revokeObjectURL(url);
+    this.blobCache.delete(trackId);
   }
 
   private async handleEnded(): Promise<void> {
@@ -433,6 +493,7 @@ class WebAudioPlayer {
 
   private keepIds(): Set<string> {
     const keep = new Set<string>();
+    if (this.activeBlobTrackId) keep.add(this.activeBlobTrackId);
     for (
       let i = Math.max(0, this.index - 1);
       i <= Math.min(this.queue.length - 1, this.index + PREFETCH_AHEAD);
@@ -459,6 +520,13 @@ class WebAudioPlayer {
         if (victim && keep.has(victim) && this.blobCache.size <= keep.size) break;
       }
       if (!victim) break;
+      if (victim === this.activeBlobTrackId) {
+        // Skip active; try next round
+        const keys = [...this.blobCache.keys()].filter((k) => k !== victim);
+        if (keys.length === 0) break;
+        victim = keys[0];
+        if (keep.has(victim)) break;
+      }
       const url = this.blobCache.get(victim);
       if (url) URL.revokeObjectURL(url);
       this.blobCache.delete(victim);
@@ -478,7 +546,8 @@ class WebAudioPlayer {
 
   private storeBlobUrl(trackId: string, blob: Blob): string {
     const existing = this.blobCache.get(trackId);
-    if (existing) {
+    // Only revoke old URL if it's not currently playing
+    if (existing && this.activeBlobTrackId !== trackId) {
       URL.revokeObjectURL(existing);
     }
     const objectUrl = URL.createObjectURL(blob);
@@ -487,10 +556,22 @@ class WebAudioPlayer {
     return objectUrl;
   }
 
-  /**
-   * Download Drive audio. Dedupes in-flight requests. Used for prefetch
-   * (full file) so next/prev are instant once warmed.
-   */
+  private async assignAndPlay(
+    trackId: string,
+    url: string,
+    generation: number
+  ): Promise<void> {
+    if (generation !== this.loadGeneration) return;
+    this.audio.src = url;
+    this.activeBlobTrackId = trackId;
+    try {
+      await this.audio.play();
+    } catch (err) {
+      if (generation !== this.loadGeneration) return;
+      throw err;
+    }
+  }
+
   private fetchBlobUrl(track: PlayerTrack): Promise<string> {
     const cached = this.blobCache.get(track.id);
     if (cached) return Promise.resolve(cached);
@@ -518,29 +599,26 @@ class WebAudioPlayer {
     return promise;
   }
 
-  /**
-   * Progressive load: start audio after ~256KB, finish download in background,
-   * then swap to the full file so duration/seek work correctly.
-   */
   private async loadTrackProgressive(
     track: PlayerTrack,
     generation: number
   ): Promise<void> {
     const cached = this.blobCache.get(track.id);
     if (cached) {
-      this.audio.src = cached;
-      await this.audio.play();
+      await this.assignAndPlay(track.id, cached, generation);
       return;
     }
 
-    // Reuse an in-flight full download if prefetch already started this track
     const pending = this.inFlight.get(track.id);
     if (pending) {
-      const url = await pending;
-      if (generation !== this.loadGeneration) return;
-      this.audio.src = url;
-      await this.audio.play();
-      return;
+      try {
+        const url = await pending;
+        if (generation !== this.loadGeneration) return;
+        await this.assignAndPlay(track.id, url, generation);
+        return;
+      } catch {
+        // Prefetch failed — fall through to a fresh download
+      }
     }
 
     const token = await this.getAccessToken(track);
@@ -557,13 +635,11 @@ class WebAudioPlayer {
     const mime = res.headers.get('content-type') || 'audio/mpeg';
     const reader = res.body?.getReader();
 
-    // No streaming body — fall back to full blob
     if (!reader) {
       const blob = await res.blob();
       if (generation !== this.loadGeneration) return;
       const url = this.storeBlobUrl(track.id, blob);
-      this.audio.src = url;
-      await this.audio.play();
+      await this.assignAndPlay(track.id, url, generation);
       return;
     }
 
@@ -587,15 +663,16 @@ class WebAudioPlayer {
           if (!started && received >= EARLY_PLAY_BYTES) {
             const partial = new Blob(chunks as BlobPart[], { type: mime });
             earlyUrl = URL.createObjectURL(partial);
-            this.audio.src = earlyUrl;
-            await this.audio.play();
+            await this.assignAndPlay(track.id, earlyUrl, generation);
             started = true;
             useStore.getState().setBuffering(false);
           }
         }
 
         if (generation !== this.loadGeneration) {
-          if (earlyUrl) URL.revokeObjectURL(earlyUrl);
+          if (earlyUrl && this.audio.getAttribute('src') !== earlyUrl) {
+            URL.revokeObjectURL(earlyUrl);
+          }
           throw new Error('aborted');
         }
 
@@ -606,18 +683,27 @@ class WebAudioPlayer {
           const t = this.audio.currentTime || 0;
           const wasPaused = this.audio.paused;
           this.audio.src = fullUrl;
+          this.activeBlobTrackId = track.id;
+          await new Promise<void>((resolve) => {
+            const onMeta = () => {
+              this.audio.removeEventListener('loadedmetadata', onMeta);
+              resolve();
+            };
+            this.audio.addEventListener('loadedmetadata', onMeta);
+            // Fallback if metadata already ready or never fires
+            window.setTimeout(resolve, 800);
+          });
           try {
             this.audio.currentTime = t;
           } catch {
-            /* ignore seek until metadata ready */
+            /* ignore */
           }
-          if (!wasPaused) {
+          if (!wasPaused && generation === this.loadGeneration) {
             await this.audio.play().catch(() => undefined);
           }
           URL.revokeObjectURL(earlyUrl);
         } else {
-          this.audio.src = fullUrl;
-          await this.audio.play();
+          await this.assignAndPlay(track.id, fullUrl, generation);
         }
 
         return fullUrl;
@@ -658,12 +744,27 @@ class WebAudioPlayer {
     }
   }
 
-  private async loadAndPlay(index: number): Promise<void> {
+  private async loadAndPlay(
+    index: number,
+    options?: { forceReload?: boolean }
+  ): Promise<void> {
     const track = this.queue[index];
     if (!track) return;
 
     const generation = ++this.loadGeneration;
     this.index = index;
+
+    if (options?.forceReload) {
+      if (this.activeBlobTrackId === track.id) {
+        this.clearAudioElement();
+      }
+      const stale = this.blobCache.get(track.id);
+      if (stale) {
+        URL.revokeObjectURL(stale);
+        this.blobCache.delete(track.id);
+      }
+      this.inFlight.delete(track.id);
+    }
 
     const cached = this.blobCache.get(track.id);
     const wasCached = Boolean(cached);
@@ -680,10 +781,17 @@ class WebAudioPlayer {
 
     this.prefetchAround(index);
 
+    const timeout = window.setTimeout(() => {
+      if (generation !== this.loadGeneration) return;
+      if (!useStore.getState().isPlaying) {
+        useStore.getState().setBuffering(false);
+        this.emit();
+      }
+    }, LOAD_TIMEOUT_MS);
+
     try {
-      if (wasCached) {
-        this.audio.src = cached!;
-        await this.audio.play();
+      if (wasCached && cached) {
+        await this.assignAndPlay(track.id, cached, generation);
       } else {
         await this.loadTrackProgressive(track, generation);
       }
@@ -696,15 +804,14 @@ class WebAudioPlayer {
     } catch (err) {
       if (generation !== this.loadGeneration) return;
       if (err instanceof Error && err.message === 'aborted') return;
-      // Stop leftover audio so title/audio can't desync when Drive auth fails
-      this.audio.pause();
-      this.audio.removeAttribute('src');
-      this.audio.load();
-      this.stopProgressLoop();
+      this.dropCachedBlob(track.id);
+      this.clearAudioElement();
       useStore.getState().setBuffering(false);
       useStore.getState().setPlaying(false);
       this.emit();
       throw err;
+    } finally {
+      window.clearTimeout(timeout);
     }
   }
 }
