@@ -533,15 +533,30 @@ class WebAudioPlayer {
     }
   }
 
-  private async getAccessToken(track: PlayerTrack): Promise<string> {
-    let token = track.headers?.Authorization?.replace(/^Bearer\s+/i, '');
+  private async getAccessToken(track: PlayerTrack, force = false): Promise<string> {
     try {
-      token = await getFreshAccessToken();
-      useStore.getState().updateAccessToken(token);
+      return await getFreshAccessToken({ force });
     } catch {
-      if (!token) throw new Error('Google session expired.');
+      if (force) throw new Error('Google session expired. Tap Reconnect to continue.');
+      const fallback = track.headers?.Authorization?.replace(/^Bearer\s+/i, '');
+      if (!fallback) throw new Error('Google session expired.');
+      return fallback;
     }
-    return token!;
+  }
+
+  /** Drive media fetch with one forced token refresh on 401. */
+  private async fetchDriveMedia(
+    track: PlayerTrack,
+    forceToken = false
+  ): Promise<Response> {
+    const token = await this.getAccessToken(track, forceToken);
+    const res = await fetch(track.url, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (res.status === 401 && !forceToken) {
+      return this.fetchDriveMedia(track, true);
+    }
+    return res;
   }
 
   private storeBlobUrl(trackId: string, blob: Blob): string {
@@ -580,10 +595,7 @@ class WebAudioPlayer {
     if (pending) return pending;
 
     const promise = (async () => {
-      const token = await this.getAccessToken(track);
-      const res = await fetch(track.url, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await this.fetchDriveMedia(track);
       if (!res.ok) {
         throw new Error(`Stream failed (${res.status})`);
       }
@@ -621,12 +633,9 @@ class WebAudioPlayer {
       }
     }
 
-    const token = await this.getAccessToken(track);
     if (generation !== this.loadGeneration) return;
 
-    const res = await fetch(track.url, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    const res = await this.fetchDriveMedia(track);
     if (!res.ok) {
       throw new Error(`Stream failed (${res.status})`);
     }
@@ -808,6 +817,10 @@ class WebAudioPlayer {
       this.clearAudioElement();
       useStore.getState().setBuffering(false);
       useStore.getState().setPlaying(false);
+      const msg = err instanceof Error ? err.message : '';
+      if (msg.includes('401') || msg.includes('session expired')) {
+        useStore.getState().setSessionExpired(true);
+      }
       this.emit();
       throw err;
     } finally {

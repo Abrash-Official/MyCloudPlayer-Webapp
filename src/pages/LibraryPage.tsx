@@ -41,7 +41,6 @@ export default function LibraryPage() {
     addPlaylist,
     removePlaylist,
     setCurrentTrack,
-    updateAccessToken,
     shuffleEnabled,
     repeatMode,
     setShuffleEnabled,
@@ -84,7 +83,6 @@ export default function LibraryPage() {
 
       try {
         const token = await getFreshAccessToken();
-        updateAccessToken(token);
         const [fetchedSongs, fetchedPlaylists] = await Promise.all([
           listSongs(myCloudPlayerFolderId, token),
           listPlaylists(myCloudPlayerFolderId, token),
@@ -118,7 +116,6 @@ export default function LibraryPage() {
       setPlaylists,
       setLoadingLibrary,
       setLibraryError,
-      updateAccessToken,
     ]
   );
 
@@ -135,7 +132,6 @@ export default function LibraryPage() {
         const items = buildPlayQueue(queue, song, useShuffle);
         let token = accessToken;
         token = await getFreshAccessToken();
-        updateAccessToken(token);
         const tracks = libraryItemsToTracks(items, token);
         setCurrentTrack(tracks[0]);
         useStore.getState().setPlaybackSession(tracks, 0, tracks[0]);
@@ -149,7 +145,6 @@ export default function LibraryPage() {
       shuffleEnabled,
       repeatMode,
       setCurrentTrack,
-      updateAccessToken,
     ]
   );
 

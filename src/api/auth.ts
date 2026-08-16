@@ -237,8 +237,15 @@ function hasUsableToken(skewMs = 60_000): boolean {
   );
 }
 
-export async function getFreshAccessToken(): Promise<string> {
-  if (hasUsableToken(60_000)) {
+/**
+ * Returns a usable Google access token.
+ * Pass `{ force: true }` after a Drive 401 so we refresh even if the
+ * client-side expiry clock still looks valid.
+ */
+export async function getFreshAccessToken(options?: {
+  force?: boolean;
+}): Promise<string> {
+  if (!options?.force && hasUsableToken(60_000)) {
     return useStore.getState().accessToken!;
   }
 
@@ -255,14 +262,7 @@ export async function getFreshAccessToken(): Promise<string> {
       applyToken(fresh, expiresIn);
       return fresh;
     } catch {
-      const { accessToken, tokenExpiresAt } = useStore.getState();
-      if (
-        accessToken &&
-        tokenExpiresAt &&
-        tokenExpiresAt > Date.now() - 120_000
-      ) {
-        return accessToken;
-      }
+      // Never hand back a token Google already rejected / that failed refresh.
       useStore.getState().setSessionExpired(true);
       throw new Error('Google session expired. Tap Reconnect to continue.');
     } finally {

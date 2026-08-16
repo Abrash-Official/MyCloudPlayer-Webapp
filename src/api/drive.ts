@@ -369,11 +369,20 @@ const authHeaders = (
   ...(contentType ? { 'Content-Type': contentType } : {}),
 });
 
-const driveGet = (path: string, token: string) =>
-  fetch(`${DRIVE_API}${path}`, {
+const driveGet = async (path: string, token: string): Promise<Response> => {
+  const url = `${DRIVE_API}${path}`;
+  let res = await fetch(url, {
     headers: { Authorization: `Bearer ${token}` },
   });
-
+  if (res.status === 401) {
+    const { getFreshAccessToken } = await import('./auth');
+    const fresh = await getFreshAccessToken({ force: true });
+    res = await fetch(url, {
+      headers: { Authorization: `Bearer ${fresh}` },
+    });
+  }
+  return res;
+};
 const assertOk = (res: Response, label: string): void => {
   if (!res.ok) {
     throw new Error(`${label} failed with status ${res.status}`);

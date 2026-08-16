@@ -26,7 +26,6 @@ export default function SearchPage() {
     accessToken,
     addSong,
     setCurrentTrack,
-    updateAccessToken,
     shuffleEnabled,
     repeatMode,
   } = useStore();
@@ -59,7 +58,6 @@ export default function SearchPage() {
       try {
         let token = accessToken;
         token = await getFreshAccessToken();
-        updateAccessToken(token);
         const playQueueItems = buildPlayQueue(queue, song, shuffleEnabled);
         const tracks = libraryItemsToTracks(playQueueItems, token);
         await playQueue(tracks, { repeatMode, forceRestart: true });
@@ -73,7 +71,6 @@ export default function SearchPage() {
       shuffleEnabled,
       repeatMode,
       setCurrentTrack,
-      updateAccessToken,
     ]
   );
 
@@ -127,7 +124,6 @@ export default function SearchPage() {
 
       setDownloadState({ status: 'uploading', progress: 0 });
       const token = await getFreshAccessToken();
-      updateAccessToken(token);
       const uploaded = await uploadSongBlobToDrive(
         blob,
         driveFilename,

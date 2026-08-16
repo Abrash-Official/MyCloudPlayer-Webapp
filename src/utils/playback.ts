@@ -31,7 +31,6 @@ export async function playQueue(
   let token = useStore.getState().accessToken;
   try {
     token = await getFreshAccessToken();
-    useStore.getState().updateAccessToken(token);
   } catch {
     if (!token) throw new Error('Google Drive is not connected.');
   }

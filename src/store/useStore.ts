@@ -131,12 +131,17 @@ export const useStore = create<AppState>()(
           sessionExpired: false,
         }),
 
-      updateAccessToken: (token, expiresIn = 3600) =>
-        set({
+      updateAccessToken: (token, expiresIn) =>
+        set((state) => ({
           accessToken: token,
-          tokenExpiresAt: Date.now() + expiresIn * 1000,
+          // Only bump expiry when Google gave us expires_in. Calling this with
+          // just the same token must not pretend the token lasts another hour.
+          tokenExpiresAt:
+            expiresIn != null
+              ? Date.now() + expiresIn * 1000
+              : state.tokenExpiresAt,
           sessionExpired: false,
-        }),
+        })),
 
       clearAuth: () =>
         set({

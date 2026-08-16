@@ -35,7 +35,6 @@ export default function PlaylistPage() {
     songs: librarySongs,
     accessToken,
     setCurrentTrack,
-    updateAccessToken,
     shuffleEnabled,
     repeatMode,
     setShuffleEnabled,
@@ -85,7 +84,6 @@ export default function PlaylistPage() {
       const queueItems = buildPlayQueue(items, start, useShuffle);
       let token = accessToken;
       token = await getFreshAccessToken();
-      updateAccessToken(token);
       const tracks = libraryItemsToTracks(queueItems, token).map((t) => ({
         ...t,
         artist: folder.name,
