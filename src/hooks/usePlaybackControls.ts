@@ -12,6 +12,7 @@ function isTypingTarget(target: EventTarget | null): boolean {
 
 /**
  * Space = play/pause (without activating focused buttons).
+ * Shift+N = next, Shift+P = previous.
  * Media Session for headset / OS / Bluetooth next-prev-pause is wired in audioPlayer.
  */
 export function usePlaybackControls(enabled: boolean) {
@@ -32,6 +33,17 @@ export function usePlaybackControls(enabled: boolean) {
           document.activeElement.blur();
         }
         void audioPlayer.togglePlayPause();
+        return;
+      }
+
+      if (e.shiftKey && e.code === 'KeyN') {
+        e.preventDefault();
+        void audioPlayer.skipToNext();
+        return;
+      }
+      if (e.shiftKey && e.code === 'KeyP') {
+        e.preventDefault();
+        void audioPlayer.skipToPrevious();
         return;
       }
 

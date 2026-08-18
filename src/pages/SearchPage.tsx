@@ -218,7 +218,9 @@ export default function SearchPage() {
         <div className="yt-card">
           <img src={result.thumbnail} alt="" />
           <div className="body">
-            <div className="song-title">{result.title}</div>
+            <div className="song-title" title={result.title}>
+              {result.title}
+            </div>
             <div className="song-sub">{result.channelTitle}</div>
             <button
               type="button"

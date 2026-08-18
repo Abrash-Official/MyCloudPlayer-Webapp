@@ -44,7 +44,9 @@ export default function PlayerModal() {
           <div className="player-art">
             <Icons.music size={80} />
           </div>
-          <h3 className="player-title">{track?.title ?? 'No track loaded'}</h3>
+          <h3 className="player-title" title={track?.title ?? undefined}>
+            {track?.title ?? 'No track loaded'}
+          </h3>
           <p className="player-artist">
             {isBuffering ? 'Buffering…' : track?.artist ?? ''}
           </p>
@@ -102,6 +104,8 @@ export default function PlayerModal() {
             <button
               type="button"
               className="icon-btn"
+              aria-label="Previous"
+              title="Previous (Shift+P)"
               onClick={() => void audioPlayer.skipToPrevious()}
             >
               <Icons.skipBack size={32} />
@@ -116,6 +120,8 @@ export default function PlayerModal() {
             <button
               type="button"
               className="icon-btn"
+              aria-label="Next"
+              title="Next (Shift+N)"
               onClick={() => void audioPlayer.skipToNext()}
             >
               <Icons.skipForward size={32} />

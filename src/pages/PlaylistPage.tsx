@@ -134,7 +134,9 @@ export default function PlaylistPage() {
             <Icons.chevronBack />
           </Link>
           <div style={{ minWidth: 0 }}>
-            <h1 style={{ fontSize: 20 }}>{folder.name}</h1>
+            <h1 style={{ fontSize: 20 }} title={folder.name}>
+              {folder.name}
+            </h1>
             <p className="sub">{playlistSongs.length} songs</p>
           </div>
         </div>
@@ -164,7 +166,9 @@ export default function PlaylistPage() {
                 </div>
                 <div className="hero-meta">
                   <div className="hero-kicker">PLAYLIST</div>
-                  <h2 className="hero-title">{folder.name}</h2>
+                  <h2 className="hero-title" title={folder.name}>
+                    {folder.name}
+                  </h2>
                   <p className="hero-sub">
                     {playlistSongs.length} songs · Google Drive
                   </p>
@@ -298,7 +302,10 @@ export default function PlaylistPage() {
                       <Icons.music size={18} />
                     </div>
                     <div className="song-text">
-                      <div className="song-title">
+                      <div
+                        className="song-title"
+                        title={stripAudioExtension(item.name)}
+                      >
                         {stripAudioExtension(item.name)}
                       </div>
                     </div>

@@ -43,7 +43,9 @@ export default function MiniPlayer() {
           <Icons.music size={20} />
         </div>
         <div className="mini-info">
-          <div className="mini-title">{currentTrack.title}</div>
+          <div className="mini-title" title={currentTrack.title}>
+            {currentTrack.title}
+          </div>
           <div className="mini-artist">
             {isBuffering ? 'Loading…' : currentTrack.artist}
           </div>
@@ -67,6 +69,8 @@ export default function MiniPlayer() {
         <button
           type="button"
           className="icon-btn"
+          aria-label="Next"
+          title="Next (Shift+N)"
           onClick={(e) => {
             e.stopPropagation();
             void audioPlayer.skipToNext();
@@ -87,7 +91,9 @@ export default function MiniPlayer() {
             <Icons.music size={22} />
           </div>
           <div className="mini-info">
-            <div className="mini-title">{currentTrack.title}</div>
+            <div className="mini-title" title={currentTrack.title}>
+            {currentTrack.title}
+          </div>
             <div className="mini-artist">
               {isBuffering ? 'Loading…' : currentTrack.artist}
             </div>
@@ -109,6 +115,7 @@ export default function MiniPlayer() {
               type="button"
               className="icon-btn"
               aria-label="Previous"
+              title="Previous (Shift+P)"
               onClick={() => void audioPlayer.skipToPrevious()}
             >
               <Icons.skipBack size={20} />
@@ -131,6 +138,7 @@ export default function MiniPlayer() {
               type="button"
               className="icon-btn"
               aria-label="Next"
+              title="Next (Shift+N)"
               onClick={() => void audioPlayer.skipToNext()}
             >
               <Icons.skipForward size={20} />

@@ -22,7 +22,9 @@ export default function PlaylistCard({ playlist, onDelete }: PlaylistCardProps) 
         className="playlist-text"
         state={{ folder: playlist }}
       >
-        <div className="playlist-name">{playlist.name}</div>
+        <div className="playlist-name" title={playlist.name}>
+          {playlist.name}
+        </div>
         <div className="playlist-meta">Playlist · Google Drive</div>
       </Link>
       <button

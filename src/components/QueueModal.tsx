@@ -84,7 +84,9 @@ export default function QueueModal() {
                       <Icons.music size={18} />
                     </div>
                     <div className="song-text">
-                      <div className="song-title">{currentTrack.title}</div>
+                      <div className="song-title" title={currentTrack.title}>
+                        {currentTrack.title}
+                      </div>
                       <div className="song-sub">{currentTrack.artist}</div>
                     </div>
                   </div>
@@ -134,7 +136,9 @@ export default function QueueModal() {
                           <Icons.music size={18} />
                         </div>
                         <div style={{ minWidth: 0, flex: 1 }}>
-                          <div className="song-title">{item.track.title}</div>
+                          <div className="song-title" title={item.track.title}>
+                            {item.track.title}
+                          </div>
                           <div className="song-sub">{item.track.artist}</div>
                         </div>
                       </button>
@@ -191,7 +195,9 @@ export default function QueueModal() {
                   <Icons.music size={16} />
                 </div>
                 <div className="song-text" style={{ minWidth: 0, flex: 1 }}>
-                  <div className="song-title">{item.track.title}</div>
+                  <div className="song-title" title={item.track.title}>
+                    {item.track.title}
+                  </div>
                   <div className="song-sub">{item.track.artist}</div>
                 </div>
                 <button

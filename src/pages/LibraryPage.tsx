@@ -244,9 +244,14 @@ export default function LibraryPage() {
             type="button"
             className="icon-btn"
             aria-label="Refresh library"
+            title="Refresh library"
+            disabled={isLoadingLibrary}
             onClick={() => void loadLibrary(true)}
           >
-            <Icons.refresh size={20} />
+            <Icons.refresh
+              size={20}
+              className={isLoadingLibrary ? 'icon-spin' : undefined}
+            />
           </button>
         </div>
       </header>
