@@ -2,8 +2,8 @@ import { useCallback, useMemo, useState } from 'react';
 import { Icons } from '../components/Icons';
 import SongCard from '../components/SongCard';
 import { searchYouTube } from '../api/youtube';
-import { downloadToBlob, extractAudioUrl } from '../api/cobalt';
-import { uploadSongBlobToDrive } from '../api/drive';
+import { downloadAndSaveToDrive } from '../api/downloadAndSave';
+import { listSongs } from '../api/drive';
 import { getFreshAccessToken } from '../api/auth';
 import { useStore } from '../store/useStore';
 import { searchLocalLibrary } from '../utils/localSearch';
@@ -13,8 +13,7 @@ import {
 } from '../utils/libraryItems';
 import { buildPlayQueue } from '../utils/playerQueue';
 import { playQueue } from '../utils/playback';
-import { buildSongFilename } from '../utils/filename';
-import LoadingState, { ProgressBar } from '../components/LoadingState';
+import LoadingState from '../components/LoadingState';
 import type { DownloadState, LibraryItem, YouTubeSearchResult } from '../types';
 
 export default function SearchPage() {
@@ -114,24 +113,29 @@ export default function SearchPage() {
 
     try {
       setDownloadState({ status: 'extracting', progress: 0 });
-      const driveFilename = buildSongFilename(result.title);
-      const { url: audioUrl } = await extractAudioUrl(result.videoId);
 
-      setDownloadState({ status: 'downloading', progress: 0 });
-      const blob = await downloadToBlob(audioUrl, (p) =>
-        setDownloadState({ status: 'downloading', progress: p })
-      );
-
-      setDownloadState({ status: 'uploading', progress: 0 });
       const token = await getFreshAccessToken();
-      const uploaded = await uploadSongBlobToDrive(
-        blob,
-        driveFilename,
+      const videoUrl = `https://youtu.be/${result.videoId}`;
+
+      await downloadAndSaveToDrive({
+        videoUrl,
+        accessToken: token,
+      });
+
+      // Refresh list after server-side download/upload so the new song appears.
+      const refreshedToken = await getFreshAccessToken();
+      const latestSongs = await listSongs(
         myCloudPlayerFolderId,
-        token,
-        (p) => setDownloadState({ status: 'uploading', progress: p })
+        refreshedToken
       );
-      addSong(uploaded);
+      const existingIds = new Set(songs.map((s) => s.id));
+      for (const s of latestSongs) {
+        if (!existingIds.has(s.id)) {
+          existingIds.add(s.id);
+          addSong(s);
+        }
+      }
+
       setDownloadState({ status: 'done', progress: 100 });
     } catch (err: unknown) {
       setDownloadState({
@@ -145,14 +149,12 @@ export default function SearchPage() {
 
   const statusLabel =
     downloadState.status === 'extracting'
-      ? 'Extracting audio…'
-      : downloadState.status === 'downloading'
-        ? `Downloading… ${downloadState.progress}%`
-        : downloadState.status === 'uploading'
-          ? `Uploading to Drive… ${downloadState.progress}%`
-          : downloadState.status === 'done'
-            ? 'Saved to Google Drive'
-            : null;
+      ? 'Downloading & saving to Drive…'
+      : downloadState.status === 'done'
+        ? 'Saved to Google Drive'
+        : downloadState.status === 'error'
+          ? 'Failed'
+          : null;
 
   return (
     <div className="screen">
@@ -228,8 +230,6 @@ export default function SearchPage() {
               style={{ marginTop: 12, width: '100%' }}
               disabled={
                 downloadState.status === 'extracting' ||
-                downloadState.status === 'downloading' ||
-                downloadState.status === 'uploading' ||
                 downloadState.status === 'done'
               }
               onClick={() => {
@@ -240,28 +240,15 @@ export default function SearchPage() {
               }}
             >
               {downloadState.status === 'done'
-                ? 'Downloaded'
+                ? 'Added to Drive'
                 : downloadState.status === 'idle' ||
                     downloadState.status === 'error'
-                  ? 'Download to Drive'
+                  ? 'Add to Drive'
                   : statusLabel}
             </button>
             {downloadState.status === 'extracting' ? (
               <div style={{ marginTop: 14 }}>
-                <LoadingState label="Extracting audio…" compact />
-              </div>
-            ) : null}
-            {downloadState.status === 'downloading' ||
-            downloadState.status === 'uploading' ? (
-              <div style={{ marginTop: 14 }}>
-                <ProgressBar
-                  progress={downloadState.progress}
-                  label={
-                    downloadState.status === 'downloading'
-                      ? 'Downloading…'
-                      : 'Uploading to Drive…'
-                  }
-                />
+                <LoadingState label="Downloading & saving…" compact />
               </div>
             ) : null}
             {downloadState.status === 'done' ? (
