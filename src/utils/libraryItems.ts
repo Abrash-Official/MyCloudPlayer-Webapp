@@ -24,7 +24,6 @@ export const toPlayerTrack = (
     url: buildStreamUrl(item.id),
     title: stripAudioExtension(item.name),
     artist: 'Google Drive',
-    artwork: item.thumbnailLink,
     headers: { Authorization: `Bearer ${accessToken}` },
   };
 };

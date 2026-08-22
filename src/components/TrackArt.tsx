@@ -5,6 +5,7 @@ interface TrackArtProps {
   title?: string;
   className?: string;
   iconSize?: number;
+  onArtError?: () => void;
 }
 
 export default function TrackArt({
@@ -12,11 +13,17 @@ export default function TrackArt({
   title,
   className = 'song-art',
   iconSize = 18,
+  onArtError,
 }: TrackArtProps) {
   if (artwork) {
     return (
       <div className={className}>
-        <img src={artwork} alt={title ? `${title} cover` : ''} loading="lazy" />
+        <img
+          src={artwork}
+          alt={title ? `${title} cover` : ''}
+          loading="lazy"
+          onError={onArtError}
+        />
       </div>
     );
   }

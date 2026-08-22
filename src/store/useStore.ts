@@ -205,8 +205,10 @@ export const useStore = create<AppState>()(
         theme: state.theme,
         shuffleEnabled: state.shuffleEnabled,
         repeatMode: state.repeatMode,
-        currentTrack: state.currentTrack,
-        playbackQueue: state.playbackQueue,
+        currentTrack: state.currentTrack
+          ? { ...state.currentTrack, artwork: undefined }
+          : null,
+        playbackQueue: state.playbackQueue.map(({ artwork: _a, ...track }) => track),
         playbackIndex: state.playbackIndex,
         isAuthenticated: state.isAuthenticated,
         myCloudPlayerFolderId: state.myCloudPlayerFolderId,
@@ -223,6 +225,15 @@ export const useStore = create<AppState>()(
       onRehydrateStorage: () => (state) => {
         if (state?.userEmail && state?.myCloudPlayerFolderId) {
           state.isAuthenticated = true;
+        }
+        // Blob artwork URLs from a prior session are always invalid.
+        if (state?.currentTrack?.artwork) {
+          state.currentTrack = { ...state.currentTrack, artwork: undefined };
+        }
+        if (state?.playbackQueue?.length) {
+          state.playbackQueue = state.playbackQueue.map((track) =>
+            track.artwork ? { ...track, artwork: undefined } : track
+          );
         }
       },
     }

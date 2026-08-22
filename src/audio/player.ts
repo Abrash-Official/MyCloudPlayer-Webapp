@@ -624,19 +624,7 @@ class WebAudioPlayer {
   }
 
   private applyArtworkToTrack(trackId: string, artworkUrl: string): void {
-    this.queue = this.queue.map((t) =>
-      t.id === trackId ? { ...t, artwork: artworkUrl } : t
-    );
-    const { currentTrack, playbackIndex } = useStore.getState();
-    useStore
-      .getState()
-      .setPlaybackSession(
-        this.queue,
-        playbackIndex,
-        currentTrack?.id === trackId
-          ? { ...currentTrack, artwork: artworkUrl }
-          : currentTrack
-      );
+    const { currentTrack } = useStore.getState();
     if (currentTrack?.id === trackId) {
       this.updateMediaSessionMetadata({ ...currentTrack, artwork: artworkUrl });
       this.emit();

@@ -4,6 +4,8 @@ import ConfirmDialog from './ConfirmDialog';
 import { useStore } from '../store/useStore';
 import { audioPlayer } from '../audio/player';
 import { useTrackArtwork } from '../hooks/useTrackArtwork';
+import { getFreshAccessToken } from '../api/auth';
+import { ensureArtwork, invalidateArtwork } from '../utils/artwork';
 import { toPlayerTrack } from '../utils/libraryItems';
 import { stripAudioExtension } from '../utils/filename';
 import type { LibraryItem } from '../types';
@@ -91,7 +93,17 @@ export default function SongCard({
       {index != null ? <span className="song-index">{index}</span> : null}
       <button type="button" className="song-art" onClick={onPlay} aria-label="Play">
         {artwork ? (
-          <img src={artwork} alt="" loading="lazy" />
+          <img
+            src={artwork}
+            alt=""
+            loading="lazy"
+            onError={() => {
+              invalidateArtwork(song.id);
+              void getFreshAccessToken()
+                .then((token) => ensureArtwork(song.id, token))
+                .catch(() => undefined);
+            }}
+          />
         ) : (
           <Icons.music size={18} />
         )}
