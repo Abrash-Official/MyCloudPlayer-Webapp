@@ -2,6 +2,7 @@ import { Icons } from './Icons';
 import TrackArt from './TrackArt';
 import { useStore } from '../store/useStore';
 import { audioPlayer } from '../audio/player';
+import { useTrackArtwork } from '../hooks/useTrackArtwork';
 import { cycleRepeatMode } from '../utils/repeatMode';
 import { formatTime } from './SongCard';
 
@@ -18,6 +19,8 @@ export default function PlayerModal() {
   const repeatMode = useStore((s) => s.repeatMode);
   const setShuffleEnabled = useStore((s) => s.setShuffleEnabled);
   const setRepeatMode = useStore((s) => s.setRepeatMode);
+
+  const artwork = useTrackArtwork(track?.id) ?? track?.artwork;
 
   if (!open) return null;
 
@@ -43,7 +46,7 @@ export default function PlayerModal() {
 
         <div className="modal-body player-screen">
           <TrackArt
-            artwork={track?.artwork}
+            artwork={artwork}
             title={track?.title}
             className="player-art"
             iconSize={80}

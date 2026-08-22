@@ -3,6 +3,7 @@ import { Icons } from './Icons';
 import ConfirmDialog from './ConfirmDialog';
 import { useStore } from '../store/useStore';
 import { audioPlayer } from '../audio/player';
+import { useTrackArtwork } from '../hooks/useTrackArtwork';
 import { toPlayerTrack } from '../utils/libraryItems';
 import { stripAudioExtension } from '../utils/filename';
 import type { LibraryItem } from '../types';
@@ -80,10 +81,7 @@ export default function SongCard({
 
   const showMenu = allowQueueActions || Boolean(onDelete);
   const displayName = stripAudioExtension(song.name);
-  const displayArtwork =
-    isActive && currentTrack?.artwork
-      ? currentTrack.artwork
-      : song.thumbnailLink;
+  const artwork = useTrackArtwork(song.id);
 
   return (
     <div
@@ -92,8 +90,8 @@ export default function SongCard({
     >
       {index != null ? <span className="song-index">{index}</span> : null}
       <button type="button" className="song-art" onClick={onPlay} aria-label="Play">
-        {displayArtwork ? (
-          <img src={displayArtwork} alt="" loading="lazy" />
+        {artwork ? (
+          <img src={artwork} alt="" loading="lazy" />
         ) : (
           <Icons.music size={18} />
         )}

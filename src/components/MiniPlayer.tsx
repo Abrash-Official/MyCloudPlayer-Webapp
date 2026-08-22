@@ -2,6 +2,7 @@ import { Icons } from './Icons';
 import TrackArt from './TrackArt';
 import { useStore } from '../store/useStore';
 import { audioPlayer } from '../audio/player';
+import { useTrackArtwork } from '../hooks/useTrackArtwork';
 import { cycleRepeatMode } from '../utils/repeatMode';
 import { formatTime } from './SongCard';
 
@@ -24,6 +25,8 @@ export default function MiniPlayer() {
   const setPlayerOpen = useStore((s) => s.setPlayerOpen);
   const setQueueOpen = useStore((s) => s.setQueueOpen);
 
+  const artwork = useTrackArtwork(currentTrack?.id) ?? currentTrack?.artwork;
+
   if (!currentTrack) return null;
 
   const ratio = duration > 0 ? Math.min(1, position / duration) : 0;
@@ -41,7 +44,7 @@ export default function MiniPlayer() {
         role="button"
       >
         <TrackArt
-          artwork={currentTrack.artwork}
+          artwork={artwork}
           title={currentTrack.title}
           className="mini-art"
           iconSize={20}
@@ -92,7 +95,7 @@ export default function MiniPlayer() {
           onClick={() => setPlayerOpen(true)}
         >
           <TrackArt
-            artwork={currentTrack.artwork}
+            artwork={artwork}
             title={currentTrack.title}
             className="mini-art"
             iconSize={22}

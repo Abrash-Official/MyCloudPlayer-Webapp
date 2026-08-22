@@ -19,6 +19,7 @@ import { buildPlayQueue } from '../utils/playerQueue';
 import { playQueue, reshuffleActiveQueue } from '../utils/playback';
 import { searchLocalLibrary } from '../utils/localSearch';
 import { cycleRepeatMode } from '../utils/repeatMode';
+import { ensureArtwork } from '../utils/artwork';
 import LoadingState from '../components/LoadingState';
 import { audioPlayer } from '../audio/player';
 import type { LibraryItem } from '../types';
@@ -98,6 +99,10 @@ export default function LibraryPage() {
             audioPlayer.warmTracks(libraryItemsToTracks(warmItems, token));
           } catch {
             /* ignore warm errors */
+          }
+          // Prefetch cover art for visible library rows
+          for (const song of fetchedSongs.slice(0, 40)) {
+            void ensureArtwork(song.id, token);
           }
         }
       } catch (err: unknown) {

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Icons } from './Icons';
-import TrackArt from './TrackArt';
+import TrackArtwork from './TrackArtwork';
 import { useStore } from '../store/useStore';
 import { audioPlayer } from '../audio/player';
 
@@ -81,8 +81,8 @@ export default function QueueModal() {
                     className="song-row active"
                     style={{ borderRadius: 12, background: 'var(--primary-container)' }}
                   >
-                    <TrackArt
-                      artwork={currentTrack.artwork}
+                    <TrackArtwork
+                      trackId={currentTrack.id}
                       title={currentTrack.title}
                       className="song-art"
                     />
@@ -135,8 +135,8 @@ export default function QueueModal() {
                           void audioPlayer.skipToIndex(item.queueIndex);
                         }}
                       >
-                        <TrackArt
-                          artwork={item.track.artwork}
+                        <TrackArtwork
+                          trackId={item.track.id}
                           title={item.track.title}
                           className="song-art"
                         />
@@ -196,8 +196,8 @@ export default function QueueModal() {
           ) : (
             previous.map((item) => (
               <div className="song-row" key={`h-${item.queueIndex}-${item.track.id}`}>
-                <TrackArt
-                  artwork={item.track.artwork}
+                <TrackArtwork
+                  trackId={item.track.id}
                   title={item.track.title}
                   className="song-art"
                   iconSize={16}

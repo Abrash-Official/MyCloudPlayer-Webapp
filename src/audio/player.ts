@@ -2,7 +2,7 @@ import { getFreshAccessToken } from '../api/auth';
 import { useStore } from '../store/useStore';
 import type { PlayerTrack, RepeatModeSetting } from '../types';
 import { shuffleQueue } from '../utils/playerQueue';
-import { extractAlbumArt } from '../utils/albumArt';
+import { ensureArtwork } from '../utils/artwork';
 
 type Listener = () => void;
 
@@ -16,7 +16,6 @@ const LOAD_TIMEOUT_MS = 45_000;
 class WebAudioPlayer {
   private audio = new Audio();
   private blobCache = new Map<string, string>();
-  private artworkCache = new Map<string, string>();
   private inFlight = new Map<string, Promise<string>>();
   private prefetching = new Set<string>();
   private queue: PlayerTrack[] = [];
@@ -254,6 +253,7 @@ class WebAudioPlayer {
   }
 
   warmTrack(track: PlayerTrack): void {
+    this.prefetchArtwork(track);
     if (this.blobCache.has(track.id) || this.inFlight.has(track.id)) return;
     void this.fetchBlobUrl(track).catch(() => {
       /* warm failures are non-fatal */
@@ -616,16 +616,11 @@ class WebAudioPlayer {
   }
 
   private cacheArtworkFromBlob(trackId: string, blob: Blob): void {
-    void extractAlbumArt(blob)
-      .then((artBlob) => {
-        if (!artBlob) return;
-        const existing = this.artworkCache.get(trackId);
-        if (existing) URL.revokeObjectURL(existing);
-        const url = URL.createObjectURL(artBlob);
-        this.artworkCache.set(trackId, url);
-        this.applyArtworkToTrack(trackId, url);
-      })
-      .catch(() => undefined);
+    const track = this.queue.find((t) => t.id === trackId);
+    const token = track?.headers?.Authorization?.replace(/^Bearer\s+/i, '');
+    void ensureArtwork(trackId, token, blob).then((url) => {
+      if (url) this.applyArtworkToTrack(trackId, url);
+    });
   }
 
   private applyArtworkToTrack(trackId: string, artworkUrl: string): void {
@@ -648,8 +643,12 @@ class WebAudioPlayer {
     }
   }
 
-  getTrackArtwork(trackId: string): string | undefined {
-    return this.artworkCache.get(trackId);
+  private prefetchArtwork(track: PlayerTrack): void {
+    const token = track.headers?.Authorization?.replace(/^Bearer\s+/i, '');
+    if (!token) return;
+    void ensureArtwork(track.id, token).then((url) => {
+      if (url) this.applyArtworkToTrack(track.id, url);
+    });
   }
 
   private async assignAndPlay(
@@ -816,6 +815,7 @@ class WebAudioPlayer {
     if (prev) targets.push(prev);
 
     for (const track of targets) {
+      this.prefetchArtwork(track);
       if (
         this.blobCache.has(track.id) ||
         this.inFlight.has(track.id) ||
@@ -869,6 +869,7 @@ class WebAudioPlayer {
     this.updateMediaSessionMetadata(track);
     this.emit();
 
+    this.prefetchArtwork(track);
     this.prefetchAround(index);
 
     const timeout = window.setTimeout(() => {

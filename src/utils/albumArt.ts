@@ -55,13 +55,25 @@ function skipNullTerminated(data: Uint8Array, start: number): number {
   return i < data.length ? i + 1 : data.length;
 }
 
+function skipId3Text(data: Uint8Array, start: number, encoding: number): number {
+  let i = start;
+  if (encoding === 1 || encoding === 2) {
+    while (i + 1 < data.length && !(data[i] === 0 && data[i + 1] === 0)) {
+      i += 2;
+    }
+    return Math.min(i + 2, data.length);
+  }
+  return skipNullTerminated(data, start);
+}
+
 function parseApicFrame(frame: Uint8Array): Uint8Array | null {
   if (frame.length < 4) return null;
-  let i = 1; // text encoding
+  const encoding = frame[0];
+  let i = 1;
   i = skipNullTerminated(frame, i); // MIME
   if (i >= frame.length) return null;
   i += 1; // picture type
-  i = skipNullTerminated(frame, i); // description
+  i = skipId3Text(frame, i, encoding); // description
   if (i >= frame.length) return null;
   const image = frame.subarray(i);
   if (image.length < 16) return null;
@@ -118,7 +130,7 @@ function extractFromMp4(data: Uint8Array): Uint8Array | null {
       data[i + 2] === covr[2] &&
       data[i + 3] === covr[3]
     ) {
-      const searchEnd = Math.min(i + 160, data.length - 3);
+      const searchEnd = Math.min(i + 512, data.length - 3);
       for (let j = i + 4; j < searchEnd; j++) {
         if (isJpeg(data, j) || isPng(data, j)) {
           const image = sliceImageAt(data, j);
