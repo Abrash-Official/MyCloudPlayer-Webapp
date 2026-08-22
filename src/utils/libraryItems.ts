@@ -8,6 +8,7 @@ export const driveFileToLibraryItem = (file: DriveFile): LibraryItem => ({
   source: 'drive',
   mimeType: file.mimeType,
   size: file.size,
+  thumbnailLink: file.thumbnailLink,
 });
 
 export const toPlayerTrack = (
@@ -23,6 +24,7 @@ export const toPlayerTrack = (
     url: buildStreamUrl(item.id),
     title: stripAudioExtension(item.name),
     artist: 'Google Drive',
+    artwork: item.thumbnailLink,
     headers: { Authorization: `Bearer ${accessToken}` },
   };
 };

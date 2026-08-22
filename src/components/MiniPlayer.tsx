@@ -1,4 +1,5 @@
 import { Icons } from './Icons';
+import TrackArt from './TrackArt';
 import { useStore } from '../store/useStore';
 import { audioPlayer } from '../audio/player';
 import { cycleRepeatMode } from '../utils/repeatMode';
@@ -39,9 +40,12 @@ export default function MiniPlayer() {
         onClick={() => setPlayerOpen(true)}
         role="button"
       >
-        <div className="mini-art">
-          <Icons.music size={20} />
-        </div>
+        <TrackArt
+          artwork={currentTrack.artwork}
+          title={currentTrack.title}
+          className="mini-art"
+          iconSize={20}
+        />
         <div className="mini-info">
           <div className="mini-title" title={currentTrack.title}>
             {currentTrack.title}
@@ -87,13 +91,16 @@ export default function MiniPlayer() {
           className="mini-desktop-left"
           onClick={() => setPlayerOpen(true)}
         >
-          <div className="mini-art">
-            <Icons.music size={22} />
-          </div>
+          <TrackArt
+            artwork={currentTrack.artwork}
+            title={currentTrack.title}
+            className="mini-art"
+            iconSize={22}
+          />
           <div className="mini-info">
             <div className="mini-title" title={currentTrack.title}>
-            {currentTrack.title}
-          </div>
+              {currentTrack.title}
+            </div>
             <div className="mini-artist">
               {isBuffering ? 'Loading…' : currentTrack.artist}
             </div>

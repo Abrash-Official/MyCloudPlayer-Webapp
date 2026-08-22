@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Icons } from './Icons';
+import TrackArt from './TrackArt';
 import { useStore } from '../store/useStore';
 import { audioPlayer } from '../audio/player';
 
@@ -80,9 +81,11 @@ export default function QueueModal() {
                     className="song-row active"
                     style={{ borderRadius: 12, background: 'var(--primary-container)' }}
                   >
-                    <div className="song-art">
-                      <Icons.music size={18} />
-                    </div>
+                    <TrackArt
+                      artwork={currentTrack.artwork}
+                      title={currentTrack.title}
+                      className="song-art"
+                    />
                     <div className="song-text">
                       <div className="song-title" title={currentTrack.title}>
                         {currentTrack.title}
@@ -132,9 +135,11 @@ export default function QueueModal() {
                           void audioPlayer.skipToIndex(item.queueIndex);
                         }}
                       >
-                        <div className="song-art">
-                          <Icons.music size={18} />
-                        </div>
+                        <TrackArt
+                          artwork={item.track.artwork}
+                          title={item.track.title}
+                          className="song-art"
+                        />
                         <div style={{ minWidth: 0, flex: 1 }}>
                           <div className="song-title" title={item.track.title}>
                             {item.track.title}
@@ -191,9 +196,12 @@ export default function QueueModal() {
           ) : (
             previous.map((item) => (
               <div className="song-row" key={`h-${item.queueIndex}-${item.track.id}`}>
-                <div className="song-art">
-                  <Icons.music size={16} />
-                </div>
+                <TrackArt
+                  artwork={item.track.artwork}
+                  title={item.track.title}
+                  className="song-art"
+                  iconSize={16}
+                />
                 <div className="song-text" style={{ minWidth: 0, flex: 1 }}>
                   <div className="song-title" title={item.track.title}>
                     {item.track.title}

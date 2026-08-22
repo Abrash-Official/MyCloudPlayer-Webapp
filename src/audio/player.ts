@@ -2,6 +2,7 @@ import { getFreshAccessToken } from '../api/auth';
 import { useStore } from '../store/useStore';
 import type { PlayerTrack, RepeatModeSetting } from '../types';
 import { shuffleQueue } from '../utils/playerQueue';
+import { extractAlbumArt } from '../utils/albumArt';
 
 type Listener = () => void;
 
@@ -15,6 +16,7 @@ const LOAD_TIMEOUT_MS = 45_000;
 class WebAudioPlayer {
   private audio = new Audio();
   private blobCache = new Map<string, string>();
+  private artworkCache = new Map<string, string>();
   private inFlight = new Map<string, Promise<string>>();
   private prefetching = new Set<string>();
   private queue: PlayerTrack[] = [];
@@ -191,11 +193,17 @@ class WebAudioPlayer {
       return;
     }
     try {
-      navigator.mediaSession.metadata = new MediaMetadata({
+      const metadata: MediaMetadataInit = {
         title: track.title || 'Unknown track',
         artist: track.artist || 'MyCloudPlayer',
         album: 'MyCloudPlayer',
-      });
+      };
+      if (track.artwork) {
+        metadata.artwork = [
+          { src: track.artwork, sizes: '512x512', type: 'image/jpeg' },
+        ];
+      }
+      navigator.mediaSession.metadata = new MediaMetadata(metadata);
     } catch {
       /* ignore */
     }
@@ -374,7 +382,10 @@ class WebAudioPlayer {
       await this.playQueue([track], 0, { forceRestart: true });
       return;
     }
-    this.queue = [...this.queue, track];
+    const insertAt = this.index + 1;
+    const next = [...this.queue];
+    next.splice(insertAt, 0, track);
+    this.queue = next;
     useStore
       .getState()
       .setPlaybackSession(this.queue, this.index, this.queue[this.index]);
@@ -600,7 +611,45 @@ class WebAudioPlayer {
     const objectUrl = URL.createObjectURL(blob);
     this.blobCache.set(trackId, objectUrl);
     this.trimCache();
+    void this.cacheArtworkFromBlob(trackId, blob);
     return objectUrl;
+  }
+
+  private cacheArtworkFromBlob(trackId: string, blob: Blob): void {
+    void extractAlbumArt(blob)
+      .then((artBlob) => {
+        if (!artBlob) return;
+        const existing = this.artworkCache.get(trackId);
+        if (existing) URL.revokeObjectURL(existing);
+        const url = URL.createObjectURL(artBlob);
+        this.artworkCache.set(trackId, url);
+        this.applyArtworkToTrack(trackId, url);
+      })
+      .catch(() => undefined);
+  }
+
+  private applyArtworkToTrack(trackId: string, artworkUrl: string): void {
+    this.queue = this.queue.map((t) =>
+      t.id === trackId ? { ...t, artwork: artworkUrl } : t
+    );
+    const { currentTrack, playbackIndex } = useStore.getState();
+    useStore
+      .getState()
+      .setPlaybackSession(
+        this.queue,
+        playbackIndex,
+        currentTrack?.id === trackId
+          ? { ...currentTrack, artwork: artworkUrl }
+          : currentTrack
+      );
+    if (currentTrack?.id === trackId) {
+      this.updateMediaSessionMetadata({ ...currentTrack, artwork: artworkUrl });
+      this.emit();
+    }
+  }
+
+  getTrackArtwork(trackId: string): string | undefined {
+    return this.artworkCache.get(trackId);
   }
 
   private async assignAndPlay(

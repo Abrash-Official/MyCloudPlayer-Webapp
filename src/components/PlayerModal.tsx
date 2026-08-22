@@ -1,4 +1,5 @@
 import { Icons } from './Icons';
+import TrackArt from './TrackArt';
 import { useStore } from '../store/useStore';
 import { audioPlayer } from '../audio/player';
 import { cycleRepeatMode } from '../utils/repeatMode';
@@ -41,9 +42,12 @@ export default function PlayerModal() {
         </div>
 
         <div className="modal-body player-screen">
-          <div className="player-art">
-            <Icons.music size={80} />
-          </div>
+          <TrackArt
+            artwork={track?.artwork}
+            title={track?.title}
+            className="player-art"
+            iconSize={80}
+          />
           <h3 className="player-title" title={track?.title ?? undefined}>
             {track?.title ?? 'No track loaded'}
           </h3>

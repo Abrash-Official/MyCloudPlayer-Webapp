@@ -80,6 +80,10 @@ export default function SongCard({
 
   const showMenu = allowQueueActions || Boolean(onDelete);
   const displayName = stripAudioExtension(song.name);
+  const displayArtwork =
+    isActive && currentTrack?.artwork
+      ? currentTrack.artwork
+      : song.thumbnailLink;
 
   return (
     <div
@@ -88,7 +92,11 @@ export default function SongCard({
     >
       {index != null ? <span className="song-index">{index}</span> : null}
       <button type="button" className="song-art" onClick={onPlay} aria-label="Play">
-        <Icons.music size={18} />
+        {displayArtwork ? (
+          <img src={displayArtwork} alt="" loading="lazy" />
+        ) : (
+          <Icons.music size={18} />
+        )}
       </button>
       <button type="button" className="song-text" onClick={onPlay} title={displayName}>
         <div className="song-title">{displayName}</div>

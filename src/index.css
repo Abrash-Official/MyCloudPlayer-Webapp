@@ -318,6 +318,20 @@ img {
   place-items: center;
   color: var(--text-secondary);
   flex-shrink: 0;
+  overflow: hidden;
+}
+
+.song-art img,
+.mini-art img,
+.player-art img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.player-art img {
+  border-radius: 16px;
 }
 
 .playlist-art {

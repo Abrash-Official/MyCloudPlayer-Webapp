@@ -25,6 +25,7 @@ export interface LibraryItem {
   mimeType: string;
   size?: string;
   localPath?: string;
+  thumbnailLink?: string;
 }
 
 export interface YouTubeSearchResult {
