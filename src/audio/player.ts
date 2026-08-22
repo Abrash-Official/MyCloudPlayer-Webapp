@@ -2,7 +2,7 @@ import { getFreshAccessToken } from '../api/auth';
 import { useStore } from '../store/useStore';
 import type { PlayerTrack, RepeatModeSetting } from '../types';
 import { shuffleQueue } from '../utils/playerQueue';
-import { ensureArtwork } from '../utils/artwork';
+import { ensureArtworkFromAudioBlob } from '../utils/artwork';
 
 type Listener = () => void;
 
@@ -253,7 +253,6 @@ class WebAudioPlayer {
   }
 
   warmTrack(track: PlayerTrack): void {
-    this.prefetchArtwork(track);
     if (this.blobCache.has(track.id) || this.inFlight.has(track.id)) return;
     void this.fetchBlobUrl(track).catch(() => {
       /* warm failures are non-fatal */
@@ -616,27 +615,17 @@ class WebAudioPlayer {
   }
 
   private cacheArtworkFromBlob(trackId: string, blob: Blob): void {
-    const track = this.queue.find((t) => t.id === trackId);
-    const token = track?.headers?.Authorization?.replace(/^Bearer\s+/i, '');
-    void ensureArtwork(trackId, token, blob).then((url) => {
+    void ensureArtworkFromAudioBlob(trackId, blob).then((url) => {
       if (url) this.applyArtworkToTrack(trackId, url);
     });
   }
 
-  private applyArtworkToTrack(trackId: string, artworkUrl: string): void {
+  private applyArtworkToTrack(_trackId: string, artworkUrl: string): void {
     const { currentTrack } = useStore.getState();
-    if (currentTrack?.id === trackId) {
+    if (currentTrack?.id === _trackId) {
       this.updateMediaSessionMetadata({ ...currentTrack, artwork: artworkUrl });
       this.emit();
     }
-  }
-
-  private prefetchArtwork(track: PlayerTrack): void {
-    const token = track.headers?.Authorization?.replace(/^Bearer\s+/i, '');
-    if (!token) return;
-    void ensureArtwork(track.id, token).then((url) => {
-      if (url) this.applyArtworkToTrack(track.id, url);
-    });
   }
 
   private async assignAndPlay(
@@ -803,7 +792,6 @@ class WebAudioPlayer {
     if (prev) targets.push(prev);
 
     for (const track of targets) {
-      this.prefetchArtwork(track);
       if (
         this.blobCache.has(track.id) ||
         this.inFlight.has(track.id) ||
@@ -857,7 +845,6 @@ class WebAudioPlayer {
     this.updateMediaSessionMetadata(track);
     this.emit();
 
-    this.prefetchArtwork(track);
     this.prefetchAround(index);
 
     const timeout = window.setTimeout(() => {

@@ -8,6 +8,9 @@ interface TrackArtworkProps {
   title?: string;
   className?: string;
   iconSize?: number;
+  /** Only set for the actively playing row in queue. */
+  isPlaying?: boolean;
+  thumbnailLink?: string;
 }
 
 export default function TrackArtwork({
@@ -15,13 +18,24 @@ export default function TrackArtwork({
   title,
   className,
   iconSize,
+  isPlaying = false,
+  thumbnailLink,
 }: TrackArtworkProps) {
-  const artwork = useTrackArtwork(trackId);
+  const artwork = useTrackArtwork(trackId, {
+    mode: isPlaying ? 'playing' : 'none',
+    thumbnailLink,
+  });
 
   const retryArtwork = () => {
     invalidateArtwork(trackId);
     void getFreshAccessToken()
-      .then((token) => ensureArtwork(trackId, token))
+      .then((token) =>
+        ensureArtwork(trackId, {
+          accessToken: token,
+          thumbnailLink,
+          mode: isPlaying ? 'playing' : 'thumbnail',
+        })
+      )
       .catch(() => undefined);
   };
 

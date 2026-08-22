@@ -25,7 +25,7 @@ export default function MiniPlayer() {
   const setPlayerOpen = useStore((s) => s.setPlayerOpen);
   const setQueueOpen = useStore((s) => s.setQueueOpen);
 
-  const artwork = useTrackArtwork(currentTrack?.id);
+  const artwork = useTrackArtwork(currentTrack?.id, { mode: 'playing' });
 
   if (!currentTrack) return null;
 

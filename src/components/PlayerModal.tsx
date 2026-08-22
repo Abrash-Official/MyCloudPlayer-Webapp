@@ -20,7 +20,7 @@ export default function PlayerModal() {
   const setShuffleEnabled = useStore((s) => s.setShuffleEnabled);
   const setRepeatMode = useStore((s) => s.setRepeatMode);
 
-  const artwork = useTrackArtwork(track?.id);
+  const artwork = useTrackArtwork(track?.id, { mode: 'playing' });
 
   if (!open) return null;
 

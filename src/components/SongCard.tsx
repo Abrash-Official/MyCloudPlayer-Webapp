@@ -4,8 +4,7 @@ import ConfirmDialog from './ConfirmDialog';
 import { useStore } from '../store/useStore';
 import { audioPlayer } from '../audio/player';
 import { useTrackArtwork } from '../hooks/useTrackArtwork';
-import { getFreshAccessToken } from '../api/auth';
-import { ensureArtwork, invalidateArtwork } from '../utils/artwork';
+import { invalidateArtwork } from '../utils/artwork';
 import { toPlayerTrack } from '../utils/libraryItems';
 import { stripAudioExtension } from '../utils/filename';
 import type { LibraryItem } from '../types';
@@ -38,7 +37,20 @@ export default function SongCard({
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [visible, setVisible] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const rowRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = rowRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => setVisible(entry.isIntersecting),
+      { rootMargin: '120px' }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -83,10 +95,18 @@ export default function SongCard({
 
   const showMenu = allowQueueActions || Boolean(onDelete);
   const displayName = stripAudioExtension(song.name);
-  const artwork = useTrackArtwork(song.id);
+  const artwork = useTrackArtwork(song.id, {
+    mode: isActive
+      ? 'playing'
+      : visible && song.thumbnailLink
+        ? 'thumbnail'
+        : 'none',
+    thumbnailLink: song.thumbnailLink,
+  });
 
   return (
     <div
+      ref={rowRef}
       className={`song-row ${isActive ? 'active' : ''}`}
       onPointerEnter={() => onPrefetch?.()}
     >
@@ -97,12 +117,7 @@ export default function SongCard({
             src={artwork}
             alt=""
             loading="lazy"
-            onError={() => {
-              invalidateArtwork(song.id);
-              void getFreshAccessToken()
-                .then((token) => ensureArtwork(song.id, token))
-                .catch(() => undefined);
-            }}
+            onError={() => invalidateArtwork(song.id)}
           />
         ) : (
           <Icons.music size={18} />
