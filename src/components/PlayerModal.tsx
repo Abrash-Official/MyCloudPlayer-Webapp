@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { Icons } from './Icons';
 import TrackArt from './TrackArt';
 import TrackArtwork from './TrackArtwork';
@@ -31,9 +31,11 @@ export default function PlayerModal() {
   const setRepeatMode = useStore((s) => s.setRepeatMode);
 
   const artwork = useTrackArtwork(track?.id, { mode: 'playing' });
-  const [bg, setBg] = useState(
-    'linear-gradient(180deg, #1e3a5f 0%, #0f1720 42%, #050505 100%)'
-  );
+  const [palette, setPalette] = useState({
+    dominant: '#1e3a5f',
+    mid: '#0f1720',
+    deep: '#050505',
+  });
   const [queueOpen, setQueueOpen] = useState(true);
   const [tab, setTab] = useState<QueueTab>('upnext');
   const [dragFrom, setDragFrom] = useState<number | null>(null);
@@ -92,12 +94,22 @@ export default function PlayerModal() {
 
   useEffect(() => {
     if (!artwork) {
-      setBg('linear-gradient(180deg, #1e3a5f 0%, #0f1720 42%, #050505 100%)');
+      setPalette({
+        dominant: '#1e3a5f',
+        mid: '#0f1720',
+        deep: '#050505',
+      });
       return;
     }
     let cancelled = false;
-    void sampleBackdropPalette(artwork).then((palette) => {
-      if (!cancelled) setBg(palette.background);
+    void sampleBackdropPalette(artwork).then((next) => {
+      if (!cancelled) {
+        setPalette({
+          dominant: next.dominant,
+          mid: next.mid,
+          deep: next.deep,
+        });
+      }
     });
     return () => {
       cancelled = true;
@@ -173,7 +185,13 @@ export default function PlayerModal() {
       ]
         .filter(Boolean)
         .join(' ')}
-      style={{ background: bg }}
+      style={
+        {
+          '--fs-dom': palette.dominant,
+          '--fs-mid': palette.mid,
+          '--fs-deep': palette.deep,
+        } as CSSProperties
+      }
     >
       <div className="fullscreen-main">
         <div className="fullscreen-top fullscreen-chrome">
@@ -216,19 +234,20 @@ export default function PlayerModal() {
               className="fullscreen-art"
               iconSize={96}
             />
-            <div className="fullscreen-meta">
-              <h2 className="fullscreen-title" title={track?.title ?? undefined}>
-                {track?.title ?? 'No track loaded'}
-              </h2>
-              <p className="fullscreen-artist">
-                {isBuffering ? 'Buffering…' : track?.artist ?? ''}
-              </p>
-            </div>
           </div>
         </div>
 
-        <div className="fullscreen-bottom fullscreen-chrome">
-          <div className="fullscreen-controls">
+        <div className="fullscreen-bottom">
+          <div key={`meta-${slideKey}`} className="fullscreen-meta">
+            <h2 className="fullscreen-title" title={track?.title ?? undefined}>
+              {track?.title ?? 'No track loaded'}
+            </h2>
+            <p className="fullscreen-artist">
+              {isBuffering ? 'Buffering…' : track?.artist ?? ''}
+            </p>
+          </div>
+
+          <div className="fullscreen-controls fullscreen-chrome">
             <div className="seek">
               <input
                 type="range"

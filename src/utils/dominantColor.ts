@@ -6,7 +6,7 @@ export interface BackdropPalette {
   mid: string;
   /** Deep near-black for the bottom */
   deep: string;
-  /** CSS background value (layered gradients) */
+  /** CSS background value (layered gradients from all sides) */
   background: string;
 }
 
@@ -18,16 +18,33 @@ function rgb(r: number, g: number, b: number) {
   return `rgb(${clamp(r)}, ${clamp(g)}, ${clamp(b)})`;
 }
 
+function buildAllSidesBackground(dominant: string, mid: string, deep: string) {
+  return [
+    `radial-gradient(ellipse 100% 70% at 50% -8%, ${dominant} 0%, transparent 62%)`,
+    `radial-gradient(ellipse 100% 70% at 50% 108%, ${dominant} 0%, transparent 62%)`,
+    `radial-gradient(ellipse 70% 100% at -8% 50%, ${mid} 0%, transparent 58%)`,
+    `radial-gradient(ellipse 70% 100% at 108% 50%, ${mid} 0%, transparent 58%)`,
+    `radial-gradient(ellipse 90% 90% at 50% 50%, ${mid} 0%, transparent 72%)`,
+    `linear-gradient(180deg, ${deep} 0%, #000 100%)`,
+  ].join(', ');
+}
+
 export function sampleBackdropPalette(
   imageUrl: string,
   fallbackDominant = '#1e3a5f'
 ): Promise<BackdropPalette> {
   return new Promise((resolve) => {
+    const midFallback = '#0f1720';
+    const deepFallback = '#050505';
     const fallback: BackdropPalette = {
       dominant: fallbackDominant,
-      mid: '#0f1720',
-      deep: '#050505',
-      background: `linear-gradient(180deg, ${fallbackDominant} 0%, #0f1720 42%, #050505 100%)`,
+      mid: midFallback,
+      deep: deepFallback,
+      background: buildAllSidesBackground(
+        fallbackDominant,
+        midFallback,
+        deepFallback
+      ),
     };
 
     const img = new Image();
@@ -87,17 +104,14 @@ export function sampleBackdropPalette(
 
         // Keep it rich but still readable for white text
         const dominant = rgb(r * 0.72, g * 0.72, b * 0.72);
-        const mid = rgb(r * 0.38, g * 0.38, b * 0.38);
-        const deep = rgb(r * 0.08, g * 0.08, b * 0.08);
+        const mid = rgb(r * 0.42, g * 0.42, b * 0.42);
+        const deep = rgb(r * 0.1, g * 0.1, b * 0.1);
 
         resolve({
           dominant,
           mid,
           deep,
-          background: [
-            `radial-gradient(ellipse 90% 70% at 50% -10%, ${dominant} 0%, transparent 58%)`,
-            `linear-gradient(180deg, ${dominant} 0%, ${mid} 38%, ${deep} 78%, #000 100%)`,
-          ].join(', '),
+          background: buildAllSidesBackground(dominant, mid, deep),
         });
       } catch {
         resolve(fallback);
