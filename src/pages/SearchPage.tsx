@@ -34,7 +34,6 @@ export default function SearchPage() {
   const [query, setQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [result, setResult] = useState<YouTubeSearchResult | null>(null);
-  const [driveResults, setDriveResults] = useState<LibraryItem[]>([]);
   const [downloadState, setDownloadState] = useState<DownloadState>({
     status: 'idle',
     progress: 0,
@@ -45,6 +44,12 @@ export default function SearchPage() {
     () => songs.map(driveFileToLibraryItem),
     [songs]
   );
+
+  // Local Drive matches update as you type — no YouTube API usage.
+  const driveResults = useMemo(() => {
+    if (!isAuthenticated || songs.length === 0) return [];
+    return searchLocalLibrary(libraryItems, query);
+  }, [isAuthenticated, songs.length, libraryItems, query]);
 
   const existingMatch = useMemo(() => {
     if (!result) return null;
@@ -59,16 +64,16 @@ export default function SearchPage() {
 
   const canSearchYouTube = Boolean(youtubeApiKey);
   const canSearchDrive = isAuthenticated && songs.length > 0;
-  const hasAnySource = canSearchYouTube || canSearchDrive;
 
   const searchHint = useMemo(() => {
-    const parts: string[] = [];
-    if (canSearchDrive) parts.push('Google Drive');
-    if (canSearchYouTube) parts.push('YouTube');
-    if (parts.length === 0) {
-      return 'Connect Drive or add a YouTube API key in Settings';
+    if (canSearchDrive && canSearchYouTube) {
+      return 'Library matches as you type · Search button uses YouTube';
     }
-    return `Search ${parts.join(' & ')}`;
+    if (canSearchDrive) return 'Search your Google Drive library as you type';
+    if (canSearchYouTube) {
+      return 'Search YouTube (add songs to Drive from results)';
+    }
+    return 'Connect Drive or add a YouTube API key in Settings';
   }, [canSearchDrive, canSearchYouTube]);
 
   const playSearchResult = useCallback(
@@ -87,27 +92,42 @@ export default function SearchPage() {
     [accessToken, shuffleEnabled, repeatMode, setCurrentTrack]
   );
 
-  const handleSearch = async () => {
-    if (!query.trim()) return;
-    if (!hasAnySource) {
-      window.alert(searchHint);
+  const handleQueryChange = (value: string) => {
+    setQuery(value);
+    // Drop stale YouTube card when the typed query changes.
+    if (result) {
+      setResult(null);
+      setDownloadState({ status: 'idle', progress: 0 });
+      setConfirmRedownload(false);
+    }
+  };
+
+  /** YouTube only — library results already update from typing. */
+  const handleYouTubeSearch = async () => {
+    const q = query.trim();
+    if (!q) return;
+
+    if (!canSearchYouTube) {
+      if (canSearchDrive) {
+        window.alert(
+          librarySectionSongs.length > 0
+            ? 'Library matches are shown above. Add a YouTube API key in Settings to search YouTube.'
+            : 'No library matches. Add a YouTube API key in Settings to search YouTube.'
+        );
+      } else {
+        window.alert(searchHint);
+      }
       return;
     }
 
     setIsSearching(true);
     setResult(null);
-    setDriveResults([]);
     setDownloadState({ status: 'idle', progress: 0 });
     setConfirmRedownload(false);
 
     try {
-      if (canSearchDrive) {
-        setDriveResults(searchLocalLibrary(libraryItems, query));
-      }
-      if (canSearchYouTube) {
-        const res = await searchYouTube(query, youtubeApiKey);
-        setResult(res);
-      }
+      const res = await searchYouTube(q, youtubeApiKey);
+      setResult(res);
     } catch (err: unknown) {
       window.alert(err instanceof Error ? err.message : 'Search error');
     } finally {
@@ -188,6 +208,8 @@ export default function SearchPage() {
   const downloadBusy =
     downloadState.status === 'extracting' || downloadState.status === 'done';
 
+  const trimmedQuery = query.trim();
+
   return (
     <div className="screen">
       <header className="screen-header">
@@ -202,19 +224,24 @@ export default function SearchPage() {
           className="search-input"
           placeholder="Song name…"
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => handleQueryChange(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === 'Enter') void handleSearch();
+            if (e.key === 'Enter') void handleYouTubeSearch();
           }}
         />
         <button
           type="button"
           className="btn"
-          disabled={isSearching}
-          onClick={() => void handleSearch()}
+          disabled={isSearching || !trimmedQuery}
+          title={
+            canSearchYouTube
+              ? 'Search YouTube (uses API quota)'
+              : 'YouTube search needs an API key in Settings'
+          }
+          onClick={() => void handleYouTubeSearch()}
         >
           {isSearching ? <span className="spinner" /> : <Icons.search size={18} />}
-          Search
+          {canSearchYouTube ? 'YouTube' : 'Search'}
         </button>
       </div>
 
@@ -230,7 +257,7 @@ export default function SearchPage() {
               color: 'var(--text-secondary)',
             }}
           >
-            In your library
+            Already in your library
           </div>
           {librarySectionSongs.map((song) => (
             <SongCard
@@ -244,66 +271,95 @@ export default function SearchPage() {
       ) : null}
 
       {result ? (
-        <div className="yt-card">
-          <img src={result.thumbnail} alt="" />
-          <div className="body">
-            <div className="song-title" title={result.title}>
-              {result.title}
-            </div>
-            <div className="song-sub">{result.channelTitle}</div>
-
-            {existingMatch ? (
-              <div className="yt-downloaded-badge" title={existingMatch.name}>
-                <Icons.check size={14} />
-                Already downloaded
-              </div>
-            ) : null}
-
-            <button
-              type="button"
-              className={`btn ${existingMatch && !downloadBusy ? 'secondary' : ''}`}
-              style={{ marginTop: 12, width: '100%' }}
-              disabled={downloadBusy}
-              onClick={requestDownload}
-            >
-              {downloadState.status === 'done'
-                ? 'Added to Drive'
-                : downloadState.status === 'idle' ||
-                    downloadState.status === 'error'
-                  ? existingMatch
-                    ? 'Download again'
-                    : 'Add to Drive'
-                  : statusLabel}
-            </button>
-            {downloadState.status === 'extracting' ? (
-              <div style={{ marginTop: 14 }}>
-                <LoadingState label="Downloading & saving…" compact />
-              </div>
-            ) : null}
-            {downloadState.status === 'done' ? (
-              <p
-                className="song-sub"
-                style={{ marginTop: 8, color: 'var(--primary)' }}
-              >
-                Saved to Google Drive
-              </p>
-            ) : null}
-            {existingMatch && downloadState.status === 'idle' ? (
-              <p className="song-sub" style={{ marginTop: 8 }}>
-                This track is already in Liked Songs. You can still download it
-                again if you want.
-              </p>
-            ) : null}
+        <section>
+          <div
+            style={{
+              padding: '8px 16px',
+              fontSize: 12,
+              fontWeight: 700,
+              letterSpacing: 0.6,
+              textTransform: 'uppercase',
+              color: 'var(--text-secondary)',
+            }}
+          >
+            YouTube
           </div>
-        </div>
+          <div className="yt-card">
+            <img src={result.thumbnail} alt="" />
+            <div className="body">
+              <div className="song-title" title={result.title}>
+                {result.title}
+              </div>
+              <div className="song-sub">{result.channelTitle}</div>
+
+              {existingMatch ? (
+                <div className="yt-downloaded-badge" title={existingMatch.name}>
+                  <Icons.check size={14} />
+                  Already downloaded
+                </div>
+              ) : null}
+
+              <button
+                type="button"
+                className={`btn ${existingMatch && !downloadBusy ? 'secondary' : ''}`}
+                style={{ marginTop: 12, width: '100%' }}
+                disabled={downloadBusy}
+                onClick={requestDownload}
+              >
+                {downloadState.status === 'done'
+                  ? 'Added to Drive'
+                  : downloadState.status === 'idle' ||
+                      downloadState.status === 'error'
+                    ? existingMatch
+                      ? 'Download again'
+                      : 'Add to Drive'
+                    : statusLabel}
+              </button>
+              {downloadState.status === 'extracting' ? (
+                <div style={{ marginTop: 14 }}>
+                  <LoadingState label="Downloading & saving…" compact />
+                </div>
+              ) : null}
+              {downloadState.status === 'done' ? (
+                <p
+                  className="song-sub"
+                  style={{ marginTop: 8, color: 'var(--primary)' }}
+                >
+                  Saved to Google Drive
+                </p>
+              ) : null}
+              {existingMatch && downloadState.status === 'idle' ? (
+                <p className="song-sub" style={{ marginTop: 8 }}>
+                  This track is already in Liked Songs. You can still download it
+                  again if you want.
+                </p>
+              ) : null}
+            </div>
+          </div>
+        </section>
       ) : null}
 
-      {isSearching ? <LoadingState label="Searching…" rows={3} /> : null}
+      {isSearching ? <LoadingState label="Searching YouTube…" rows={3} /> : null}
 
       {!isSearching &&
       !result &&
       librarySectionSongs.length === 0 &&
-      query.trim() === '' ? (
+      trimmedQuery !== '' &&
+      canSearchDrive ? (
+        <div className="empty" style={{ paddingTop: 24 }}>
+          <h3>Not in your library</h3>
+          <p>
+            {canSearchYouTube
+              ? 'No Drive matches for that name. Tap YouTube if you want to download it.'
+              : 'No Drive matches for that name.'}
+          </p>
+        </div>
+      ) : null}
+
+      {!isSearching &&
+      !result &&
+      librarySectionSongs.length === 0 &&
+      trimmedQuery === '' ? (
         <div className="empty">
           <Icons.search size={64} />
           <h3>Search your music</h3>
