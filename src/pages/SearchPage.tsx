@@ -1,12 +1,14 @@
 import { useCallback, useMemo, useState } from 'react';
 import { Icons } from '../components/Icons';
 import SongCard from '../components/SongCard';
+import ConfirmDialog from '../components/ConfirmDialog';
 import { searchYouTube } from '../api/youtube';
 import { downloadAndSaveToDrive } from '../api/downloadAndSave';
 import { listSongs } from '../api/drive';
 import { getFreshAccessToken } from '../api/auth';
 import { useStore } from '../store/useStore';
 import { searchLocalLibrary } from '../utils/localSearch';
+import { findLibraryMatchByTitle } from '../utils/trackMatch';
 import {
   driveFileToLibraryItem,
   libraryItemsToTracks,
@@ -37,6 +39,23 @@ export default function SearchPage() {
     status: 'idle',
     progress: 0,
   });
+  const [confirmRedownload, setConfirmRedownload] = useState(false);
+
+  const libraryItems = useMemo(
+    () => songs.map(driveFileToLibraryItem),
+    [songs]
+  );
+
+  const existingMatch = useMemo(() => {
+    if (!result) return null;
+    return findLibraryMatchByTitle(libraryItems, result.title);
+  }, [result, libraryItems]);
+
+  const librarySectionSongs = useMemo(() => {
+    const byId = new Map(driveResults.map((s) => [s.id, s]));
+    if (existingMatch) byId.set(existingMatch.id, existingMatch);
+    return Array.from(byId.values());
+  }, [driveResults, existingMatch]);
 
   const canSearchYouTube = Boolean(youtubeApiKey);
   const canSearchDrive = isAuthenticated && songs.length > 0;
@@ -65,12 +84,7 @@ export default function SearchPage() {
         window.alert(err instanceof Error ? err.message : 'Playback error');
       }
     },
-    [
-      accessToken,
-      shuffleEnabled,
-      repeatMode,
-      setCurrentTrack,
-    ]
+    [accessToken, shuffleEnabled, repeatMode, setCurrentTrack]
   );
 
   const handleSearch = async () => {
@@ -84,12 +98,11 @@ export default function SearchPage() {
     setResult(null);
     setDriveResults([]);
     setDownloadState({ status: 'idle', progress: 0 });
+    setConfirmRedownload(false);
 
     try {
       if (canSearchDrive) {
-        setDriveResults(
-          searchLocalLibrary(songs.map(driveFileToLibraryItem), query)
-        );
+        setDriveResults(searchLocalLibrary(libraryItems, query));
       }
       if (canSearchYouTube) {
         const res = await searchYouTube(query, youtubeApiKey);
@@ -102,8 +115,14 @@ export default function SearchPage() {
     }
   };
 
-  const handleDownload = async () => {
-    if (!result || downloadState.status !== 'idle') return;
+  const runDownload = async () => {
+    if (!result) return;
+    if (
+      downloadState.status === 'extracting' ||
+      downloadState.status === 'done'
+    ) {
+      return;
+    }
     if (!isAuthenticated || !myCloudPlayerFolderId) {
       window.alert(
         'Connect Google Drive in Settings first. Downloads are saved to Drive.'
@@ -122,7 +141,6 @@ export default function SearchPage() {
         accessToken: token,
       });
 
-      // Refresh list after server-side download/upload so the new song appears.
       const refreshedToken = await getFreshAccessToken();
       const latestSongs = await listSongs(
         myCloudPlayerFolderId,
@@ -147,6 +165,17 @@ export default function SearchPage() {
     }
   };
 
+  const requestDownload = () => {
+    if (downloadState.status === 'error') {
+      setDownloadState({ status: 'idle', progress: 0 });
+    }
+    if (existingMatch) {
+      setConfirmRedownload(true);
+      return;
+    }
+    void runDownload();
+  };
+
   const statusLabel =
     downloadState.status === 'extracting'
       ? 'Downloading & saving to Drive…'
@@ -155,6 +184,9 @@ export default function SearchPage() {
         : downloadState.status === 'error'
           ? 'Failed'
           : null;
+
+  const downloadBusy =
+    downloadState.status === 'extracting' || downloadState.status === 'done';
 
   return (
     <div className="screen">
@@ -186,7 +218,7 @@ export default function SearchPage() {
         </button>
       </div>
 
-      {driveResults.length > 0 ? (
+      {librarySectionSongs.length > 0 ? (
         <section>
           <div
             style={{
@@ -200,17 +232,12 @@ export default function SearchPage() {
           >
             In your library
           </div>
-          {driveResults.map((song) => (
+          {librarySectionSongs.map((song) => (
             <SongCard
               key={song.id}
               song={song}
               showPlayButton
-              onPlay={() =>
-                void playSearchResult(
-                  song,
-                  songs.map(driveFileToLibraryItem)
-                )
-              }
+              onPlay={() => void playSearchResult(song, libraryItems)}
             />
           ))}
         </section>
@@ -224,26 +251,28 @@ export default function SearchPage() {
               {result.title}
             </div>
             <div className="song-sub">{result.channelTitle}</div>
+
+            {existingMatch ? (
+              <div className="yt-downloaded-badge" title={existingMatch.name}>
+                <Icons.check size={14} />
+                Already downloaded
+              </div>
+            ) : null}
+
             <button
               type="button"
-              className="btn"
+              className={`btn ${existingMatch && !downloadBusy ? 'secondary' : ''}`}
               style={{ marginTop: 12, width: '100%' }}
-              disabled={
-                downloadState.status === 'extracting' ||
-                downloadState.status === 'done'
-              }
-              onClick={() => {
-                if (downloadState.status === 'error') {
-                  setDownloadState({ status: 'idle', progress: 0 });
-                }
-                void handleDownload();
-              }}
+              disabled={downloadBusy}
+              onClick={requestDownload}
             >
               {downloadState.status === 'done'
                 ? 'Added to Drive'
                 : downloadState.status === 'idle' ||
                     downloadState.status === 'error'
-                  ? 'Add to Drive'
+                  ? existingMatch
+                    ? 'Download again'
+                    : 'Add to Drive'
                   : statusLabel}
             </button>
             {downloadState.status === 'extracting' ? (
@@ -252,8 +281,17 @@ export default function SearchPage() {
               </div>
             ) : null}
             {downloadState.status === 'done' ? (
-              <p className="song-sub" style={{ marginTop: 8, color: 'var(--primary)' }}>
+              <p
+                className="song-sub"
+                style={{ marginTop: 8, color: 'var(--primary)' }}
+              >
                 Saved to Google Drive
+              </p>
+            ) : null}
+            {existingMatch && downloadState.status === 'idle' ? (
+              <p className="song-sub" style={{ marginTop: 8 }}>
+                This track is already in Liked Songs. You can still download it
+                again if you want.
               </p>
             ) : null}
           </div>
@@ -264,7 +302,7 @@ export default function SearchPage() {
 
       {!isSearching &&
       !result &&
-      driveResults.length === 0 &&
+      librarySectionSongs.length === 0 &&
       query.trim() === '' ? (
         <div className="empty">
           <Icons.search size={64} />
@@ -272,6 +310,24 @@ export default function SearchPage() {
           <p>{searchHint}</p>
         </div>
       ) : null}
+
+      <ConfirmDialog
+        open={confirmRedownload}
+        title="Already downloaded"
+        message={
+          existingMatch
+            ? `"${existingMatch.name.replace(/\.[^.]+$/, '')}" is already in your Google Drive library. Download it again anyway?`
+            : 'This song is already in your library. Download it again anyway?'
+        }
+        confirmLabel="Download again"
+        cancelLabel="Cancel"
+        busy={downloadState.status === 'extracting'}
+        onCancel={() => setConfirmRedownload(false)}
+        onConfirm={() => {
+          setConfirmRedownload(false);
+          void runDownload();
+        }}
+      />
     </div>
   );
 }

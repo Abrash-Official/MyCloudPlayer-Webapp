@@ -145,6 +145,11 @@ export const Icons = {
         </>
       ),
     }),
+  check: (p: IconProps) =>
+    base({
+      ...p,
+      children: <polyline points="20 6 9 17 4 12" />,
+    }),
   chevronDown: (p: IconProps) =>
     base({
       ...p,
