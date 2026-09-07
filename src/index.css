@@ -225,9 +225,12 @@ img {
   min-height: 168px;
   display: flex;
   align-items: flex-end;
-  gap: 16px;
-  background: linear-gradient(135deg, #234e52, #1a365d, #1a202c);
+  gap: 20px;
+  background:
+    radial-gradient(ellipse 80% 120% at 0% 100%, rgba(45, 212, 191, 0.22), transparent 55%),
+    linear-gradient(135deg, #1a3a4a 0%, #1a365d 48%, #111827 100%);
   color: #fff;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.28);
 }
 
 .theme-light .hero-card {
@@ -246,17 +249,26 @@ img {
 }
 
 .collage-art {
-  display: grid;
+  display: grid !important;
   grid-template-columns: 1fr 1fr;
   grid-template-rows: 1fr 1fr;
-  gap: 1px;
+  gap: 2px;
   padding: 0;
   place-items: stretch;
+  background: rgba(0, 0, 0, 0.35);
 }
 
-.collage-art img {
+.collage-cell {
   position: relative;
-  inset: auto;
+  overflow: hidden;
+  min-width: 0;
+  min-height: 0;
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.collage-cell img {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
@@ -356,8 +368,7 @@ img {
 .song-art img,
 .mini-art img,
 .player-art img,
-.fullscreen-art img,
-.collage-art img {
+.fullscreen-art img {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -781,7 +792,7 @@ img {
   z-index: 120;
   display: flex;
   color: #fff;
-  transition: background 0.6s ease;
+  transition: background 0.7s ease;
 }
 
 .fullscreen-main {
@@ -790,12 +801,22 @@ img {
   display: flex;
   flex-direction: column;
   padding: 16px 20px 28px;
+  position: relative;
 }
 
 .fullscreen-top {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: 44px 1fr 44px;
   align-items: center;
+  z-index: 2;
+}
+
+.fullscreen-context {
+  text-align: center;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  color: rgba(255, 255, 255, 0.7);
 }
 
 .fullscreen-close,
@@ -811,28 +832,47 @@ img {
   flex: 1;
   display: grid;
   place-items: center;
-  padding: 12px 0;
+  padding: 20px 0 12px;
   min-height: 0;
+  position: relative;
+}
+
+.fullscreen-glow {
+  position: absolute;
+  width: min(560px, 85vw);
+  height: min(560px, 85vw);
+  border-radius: 50%;
+  background-size: cover;
+  background-position: center;
+  filter: blur(72px) saturate(1.35);
+  opacity: 0.55;
+  transform: scale(1.05);
+  pointer-events: none;
+  z-index: 0;
 }
 
 .fullscreen-art {
-  width: min(420px, 72vw, 52vh);
+  width: min(380px, 68vw, 48vh);
   aspect-ratio: 1;
-  border-radius: 12px;
+  border-radius: 10px;
   background: rgba(0, 0, 0, 0.25);
   color: rgba(255, 255, 255, 0.7);
   position: relative;
+  z-index: 1;
   display: block;
   overflow: hidden;
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+  box-shadow:
+    0 28px 80px rgba(0, 0, 0, 0.55),
+    0 0 0 1px rgba(255, 255, 255, 0.06);
 }
 
 .fullscreen-bottom {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  width: min(640px, 100%);
+  gap: 10px;
+  width: min(560px, 100%);
   margin: 0 auto;
+  z-index: 2;
 }
 
 .fullscreen-meta {
@@ -842,18 +882,19 @@ img {
 
 .fullscreen-title {
   margin: 0;
-  font-size: clamp(22px, 4vw, 34px);
+  font-size: clamp(24px, 4vw, 36px);
   font-weight: 700;
-  letter-spacing: -0.3px;
+  letter-spacing: -0.4px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  text-shadow: 0 2px 18px rgba(0, 0, 0, 0.35);
 }
 
 .fullscreen-artist {
-  margin: 6px 0 0;
+  margin: 8px 0 0;
   font-size: 15px;
-  opacity: 0.85;
+  color: rgba(255, 255, 255, 0.78);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

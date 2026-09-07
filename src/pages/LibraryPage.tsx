@@ -63,8 +63,6 @@ export default function LibraryPage() {
     [songs]
   );
 
-  const songIds = useMemo(() => displaySongs.map((s) => s.id), [displaySongs]);
-
   const collageActive = tab === 'songs' && displaySongs.length > 0;
 
   const searchResults = useMemo(
@@ -284,7 +282,7 @@ export default function LibraryPage() {
             <>
               <div className="hero-card">
                 <PlaylistCollage
-                  songIds={songIds}
+                  songs={displaySongs}
                   active={collageActive}
                   className="hero-art"
                 />

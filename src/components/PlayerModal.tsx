@@ -6,7 +6,7 @@ import { useStore } from '../store/useStore';
 import { audioPlayer } from '../audio/player';
 import { useTrackArtwork } from '../hooks/useTrackArtwork';
 import { cycleRepeatMode } from '../utils/repeatMode';
-import { sampleDominantColor } from '../utils/dominantColor';
+import { sampleBackdropPalette } from '../utils/dominantColor';
 import { formatTime } from './SongCard';
 
 type QueueTab = 'upnext' | 'history';
@@ -27,7 +27,9 @@ export default function PlayerModal() {
   const setRepeatMode = useStore((s) => s.setRepeatMode);
 
   const artwork = useTrackArtwork(track?.id, { mode: 'playing' });
-  const [bg, setBg] = useState('#1a1a1a');
+  const [bg, setBg] = useState(
+    'linear-gradient(180deg, #1e3a5f 0%, #0f1720 42%, #050505 100%)'
+  );
   const [queueOpen, setQueueOpen] = useState(true);
   const [tab, setTab] = useState<QueueTab>('upnext');
   const [dragFrom, setDragFrom] = useState<number | null>(null);
@@ -52,12 +54,12 @@ export default function PlayerModal() {
 
   useEffect(() => {
     if (!artwork) {
-      setBg('#1a202c');
+      setBg('linear-gradient(180deg, #1e3a5f 0%, #0f1720 42%, #050505 100%)');
       return;
     }
     let cancelled = false;
-    void sampleDominantColor(artwork, '#1a202c').then((color) => {
-      if (!cancelled) setBg(color);
+    void sampleBackdropPalette(artwork).then((palette) => {
+      if (!cancelled) setBg(palette.background);
     });
     return () => {
       cancelled = true;
@@ -80,12 +82,7 @@ export default function PlayerModal() {
   };
 
   return (
-    <div
-      className="fullscreen-player"
-      style={{
-        background: `linear-gradient(180deg, ${bg} 0%, #0a0a0a 72%)`,
-      }}
-    >
+    <div className="fullscreen-player" style={{ background: bg }}>
       <div className="fullscreen-main">
         <div className="fullscreen-top">
           <button
@@ -97,6 +94,7 @@ export default function PlayerModal() {
           >
             <Icons.chevronDown size={28} />
           </button>
+          <div className="fullscreen-context">Liked Songs</div>
           <button
             type="button"
             className={`icon-btn fullscreen-queue-toggle ${queueOpen ? 'on' : ''}`}
@@ -109,6 +107,13 @@ export default function PlayerModal() {
         </div>
 
         <div className="fullscreen-stage">
+          {artwork ? (
+            <div
+              className="fullscreen-glow"
+              style={{ backgroundImage: `url(${artwork})` }}
+              aria-hidden
+            />
+          ) : null}
           <TrackArt
             artwork={artwork}
             title={track?.title}
