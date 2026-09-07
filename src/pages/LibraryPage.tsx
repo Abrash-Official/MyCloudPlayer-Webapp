@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Icons } from '../components/Icons';
 import SongCard from '../components/SongCard';
 import PlaylistCard from '../components/PlaylistCard';
+import PlaylistCollage from '../components/PlaylistCollage';
 import {
   createPlaylistFolder,
   deleteSong,
@@ -61,6 +62,10 @@ export default function LibraryPage() {
     () => songs.map(driveFileToLibraryItem),
     [songs]
   );
+
+  const songIds = useMemo(() => displaySongs.map((s) => s.id), [displaySongs]);
+
+  const collageActive = tab === 'songs' && displaySongs.length > 0;
 
   const searchResults = useMemo(
     () => searchLocalLibrary(displaySongs, query, 100),
@@ -278,9 +283,11 @@ export default function LibraryPage() {
           {displaySongs.length > 0 ? (
             <>
               <div className="hero-card">
-                <div className="hero-art">
-                  <Icons.music size={42} />
-                </div>
+                <PlaylistCollage
+                  songIds={songIds}
+                  active={collageActive}
+                  className="hero-art"
+                />
                 <div className="hero-meta">
                   <div className="hero-kicker">PLAYLIST</div>
                   <h2 className="hero-title">Liked Songs</h2>

@@ -21,6 +21,7 @@ import LoadingState from './LoadingState';
 export default function AppLayout() {
   const { colors, resolved } = useAppTheme();
   const currentTrack = useStore((s) => s.currentTrack);
+  const isPlayerOpen = useStore((s) => s.isPlayerOpen);
   const isAuthenticated = useStore((s) => s.isAuthenticated);
   const sessionExpired = useStore((s) => s.sessionExpired);
   const setAuth = useStore((s) => s.setAuth);
@@ -252,10 +253,10 @@ export default function AppLayout() {
       </nav>
 
       <div className="app-content">
-        <main className={`app-main ${currentTrack ? 'has-mini' : ''}`}>
+        <main className={`app-main ${currentTrack && !isPlayerOpen ? 'has-mini' : ''}`}>
           <Outlet />
         </main>
-        <MiniPlayer />
+        {!isPlayerOpen ? <MiniPlayer /> : null}
       </div>
 
       <PlayerModal />

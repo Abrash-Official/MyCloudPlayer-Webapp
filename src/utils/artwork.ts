@@ -173,6 +173,51 @@ export async function hydrateArtwork(trackId: string): Promise<string | null> {
   return storeInMemory(trackId, blob);
 }
 
+async function idbListCoverKeys(): Promise<string[]> {
+  try {
+    const db = await openDb();
+    return await new Promise((resolve, reject) => {
+      const tx = db.transaction(COVER_STORE, 'readonly');
+      const req = tx.objectStore(COVER_STORE).getAllKeys();
+      req.onsuccess = () =>
+        resolve((req.result as IDBValidKey[]).map(String));
+      req.onerror = () => reject(req.error);
+    });
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Return blob URLs for songs that already have cover art in memory/IndexedDB.
+ * Never hits the network.
+ */
+export async function getCachedArtworkUrls(
+  songIds: string[],
+  limit = 4
+): Promise<string[]> {
+  const idSet = new Set(songIds);
+  const memHits = songIds.filter((id) => memory.has(id));
+  const storedKeys = await idbListCoverKeys();
+  const idbHits = storedKeys.filter((id) => idSet.has(id) && !memory.has(id));
+  const available = [...memHits, ...idbHits];
+  if (available.length === 0) return [];
+
+  const shuffled = [...available];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+
+  const picked = shuffled.slice(0, Math.min(limit, shuffled.length));
+  const urls: string[] = [];
+  for (const id of picked) {
+    const url = memory.get(id) ?? (await hydrateArtwork(id));
+    if (url) urls.push(url);
+  }
+  return urls;
+}
+
 function enqueueJob(priority: number, job: () => Promise<void>): void {
   jobQueue.push({ priority, run: job });
   jobQueue.sort((a, b) => b.priority - a.priority);
