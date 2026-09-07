@@ -191,11 +191,13 @@ export default function MiniPlayer() {
           </button>
           <button
             type="button"
-            className="icon-btn"
-            aria-label="Expand player"
+            className="btn mini-fullscreen-btn"
+            aria-label="Full screen"
+            title="Full screen"
             onClick={() => setPlayerOpen(true)}
           >
-            <Icons.chevronUp size={20} />
+            <Icons.chevronUp size={18} />
+            Full screen
           </button>
         </div>
       </div>

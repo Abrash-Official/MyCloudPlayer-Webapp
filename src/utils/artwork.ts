@@ -1,6 +1,7 @@
 import { buildStreamUrl } from '../api/drive';
 import { getFreshAccessToken } from '../api/auth';
 import { extractCoverFromBlob } from './extractCoverArt';
+import { cropToSquareCover } from './cropCover';
 
 const DB_NAME = 'mcp-artwork-v1';
 const COVER_STORE = 'covers';
@@ -137,6 +138,14 @@ async function isValidImageBlob(blob: Blob): Promise<boolean> {
   return false;
 }
 
+async function prepareCoverBlob(blob: Blob): Promise<Blob> {
+  try {
+    return await cropToSquareCover(blob);
+  } catch {
+    return blob;
+  }
+}
+
 function storeInMemory(trackId: string, blob: Blob): string {
   const existing = memory.get(trackId);
   if (existing) URL.revokeObjectURL(existing);
@@ -144,6 +153,12 @@ function storeInMemory(trackId: string, blob: Blob): string {
   memory.set(trackId, url);
   notify();
   return url;
+}
+
+async function storeCover(trackId: string, blob: Blob): Promise<string> {
+  const square = await prepareCoverBlob(blob);
+  void idbPutCover(trackId, square);
+  return storeInMemory(trackId, square);
 }
 
 export function getArtworkUrl(trackId: string): string | undefined {
@@ -170,7 +185,8 @@ export async function hydrateArtwork(trackId: string): Promise<string | null> {
   if (cached) return cached;
   const blob = await idbGetCover(trackId);
   if (!blob) return null;
-  return storeInMemory(trackId, blob);
+  // Re-crop so older letterboxed YouTube covers become square.
+  return storeCover(trackId, blob);
 }
 
 async function idbListCoverKeys(): Promise<string[]> {
@@ -328,8 +344,7 @@ async function resolveArtwork(
   }
 
   if (blob) {
-    void idbPutCover(trackId, blob);
-    return storeInMemory(trackId, blob);
+    return storeCover(trackId, blob);
   }
 
   await idbMarkMiss(trackId);
@@ -388,13 +403,12 @@ export async function ensureArtworkFromAudioBlob(
 ): Promise<string | null> {
   if (memory.has(trackId)) return memory.get(trackId)!;
   const existing = await idbGetCover(trackId);
-  if (existing) return storeInMemory(trackId, existing);
+  if (existing) return storeCover(trackId, existing);
 
   const embedded = await extractCoverFromBlob(audioBlob);
   if (!embedded || !(await isValidImageBlob(embedded))) {
     await idbMarkMiss(trackId);
     return null;
   }
-  await idbPutCover(trackId, embedded);
-  return storeInMemory(trackId, embedded);
+  return storeCover(trackId, embedded);
 }
