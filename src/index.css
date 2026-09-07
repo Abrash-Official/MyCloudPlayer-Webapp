@@ -792,7 +792,43 @@ img {
   z-index: 120;
   display: flex;
   color: #fff;
-  transition: background 0.7s ease;
+  opacity: 0;
+  transform: translateY(18px) scale(0.985);
+  transition:
+    opacity 0.34s ease,
+    transform 0.34s ease,
+    background 0.7s ease;
+  cursor: none;
+}
+
+.fullscreen-player.fs-entered {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  cursor: default;
+}
+
+.fullscreen-player.fs-exiting {
+  opacity: 0;
+  transform: translateY(14px) scale(0.99);
+  pointer-events: none;
+}
+
+.fullscreen-player.chrome-hidden {
+  cursor: none;
+}
+
+.fullscreen-player.chrome-hidden .fullscreen-chrome {
+  opacity: 0;
+  transform: translateY(8px);
+  pointer-events: none;
+}
+
+.fullscreen-chrome {
+  opacity: 1;
+  transform: translateY(0);
+  transition:
+    opacity 0.35s ease,
+    transform 0.35s ease;
 }
 
 .fullscreen-main {
@@ -835,6 +871,7 @@ img {
   padding: 20px 0 12px;
   min-height: 0;
   position: relative;
+  overflow: hidden;
 }
 
 .fullscreen-glow {
@@ -851,8 +888,48 @@ img {
   z-index: 0;
 }
 
+.fullscreen-track-slide {
+  position: relative;
+  z-index: 1;
+  width: min(420px, 78vw);
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.fullscreen-track-slide.from-right {
+  animation: fs-slide-from-right 0.42s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.fullscreen-track-slide.from-left {
+  animation: fs-slide-from-left 0.42s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes fs-slide-from-right {
+  from {
+    opacity: 0.2;
+    transform: translateX(56px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+@keyframes fs-slide-from-left {
+  from {
+    opacity: 0.2;
+    transform: translateX(-56px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
 .fullscreen-art {
-  width: min(380px, 68vw, 48vh);
+  width: 100%;
+  max-width: min(380px, 68vw, 48vh);
   aspect-ratio: 1;
   border-radius: 10px;
   background: rgba(0, 0, 0, 0.25);
@@ -861,6 +938,7 @@ img {
   z-index: 1;
   display: block;
   overflow: hidden;
+  margin: 0 auto;
   box-shadow:
     0 28px 80px rgba(0, 0, 0, 0.55),
     0 0 0 1px rgba(255, 255, 255, 0.06);
@@ -873,6 +951,7 @@ img {
   width: min(560px, 100%);
   margin: 0 auto;
   z-index: 2;
+  min-height: 118px;
 }
 
 .fullscreen-meta {
@@ -940,6 +1019,7 @@ img {
 
 .fullscreen-queue {
   width: min(380px, 38vw);
+  max-width: min(380px, 38vw);
   background: rgba(0, 0, 0, 0.78);
   backdrop-filter: blur(12px);
   border-left: 1px solid rgba(255, 255, 255, 0.08);
@@ -948,6 +1028,27 @@ img {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  flex-shrink: 0;
+  transform: translateX(0);
+  opacity: 1;
+  transition:
+    transform 0.34s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.28s ease,
+    width 0.34s cubic-bezier(0.22, 1, 0.36, 1),
+    max-width 0.34s cubic-bezier(0.22, 1, 0.36, 1),
+    padding 0.34s ease,
+    border-color 0.28s ease;
+}
+
+.fullscreen-queue.queue-closed {
+  transform: translateX(100%);
+  opacity: 0;
+  width: 0;
+  max-width: 0;
+  padding-left: 0;
+  padding-right: 0;
+  border-left-color: transparent;
+  pointer-events: none;
 }
 
 .fullscreen-queue-header {
@@ -1028,7 +1129,11 @@ img {
     position: absolute;
     inset: 0;
     width: 100%;
-    z-index: 2;
+    z-index: 3;
+  }
+
+  .fullscreen-queue.queue-closed {
+    transform: translateY(108%);
   }
 }
 
